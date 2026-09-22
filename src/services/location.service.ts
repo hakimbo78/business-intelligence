@@ -65,6 +65,7 @@ export class LocationService {
       const comp = await candidateRepository.addCompetitor({
         projectId,
         name: place.name,
+        address: place.address,
         category: place.category,
         latitude: place.location.latitude,
         longitude: place.location.longitude,

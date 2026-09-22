@@ -76,6 +76,8 @@ export class MockLocationProvider implements LocationProvider {
         formattedAddress: `${params.address}, Jakarta Selatan, Indonesia`,
         location: { latitude: -6.261, longitude: 106.816 },
         placeId: 'mock-geocode-place-id',
+        roadName: 'Jalan Kemang Raya',
+        precision: 'ROOFTOP',
       },
       provenance: {
         source: this.providerName,

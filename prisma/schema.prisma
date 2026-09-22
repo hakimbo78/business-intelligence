@@ -238,6 +238,8 @@ model Competitor {
   projectId       String   @map("project_id")
   placeId         String?  @map("place_id")
   name            String
+  /// Needed to tell which businesses front the same road as the premises.
+  address         String?
   category        String
   type            String   @default("DIRECT") // DIRECT, INDIRECT, SUBSTITUTE
   latitude        Float

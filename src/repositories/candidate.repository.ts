@@ -13,6 +13,7 @@ export interface CreateCandidateInput {
 export interface CreateCompetitorInput {
   projectId: string;
   name: string;
+  address?: string;
   category: string;
   latitude: number;
   longitude: number;
@@ -69,6 +70,7 @@ export class CandidateRepository {
       data: {
         projectId: input.projectId,
         name: input.name,
+        address: input.address,
         category: input.category,
         latitude: input.latitude,
         longitude: input.longitude,

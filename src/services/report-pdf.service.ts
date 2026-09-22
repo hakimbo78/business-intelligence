@@ -1,5 +1,6 @@
 import puppeteer from 'puppeteer';
 import { REPORT_DISCLAIMER_ID } from '../lib/disclaimer.js';
+import { ROAD_CLASS_LABEL } from '../lib/road-context.js';
 import type { StructuredReport } from '../agents/report.agent.js';
 import { logger } from '../lib/logger.js';
 
@@ -98,6 +99,50 @@ function locationContextSection(report: StructuredReport): string {
       }`;
 }
 
+
+/**
+ * What kind of road the premises faces.
+ *
+ * Usually the first thing a shopfront owner wants to know, and the one thing a
+ * map cannot settle on its own — so the indication is given with its basis and
+ * its limits side by side.
+ */
+function roadSection(report: StructuredReport): string {
+  const road = report.road;
+  if (!road) return '';
+
+  const colour =
+    road.indicatedClass === 'MAIN_ROAD' ? '#27ae60'
+      : road.indicatedClass === 'ALLEY' ? '#e74c3c'
+      : '#7f8c8d';
+
+  return `
+      <h2>5. Jenis Jalan &amp; Akses</h2>
+      <table>
+        <tr>
+          <th style="width:45%">Nama jalan</th>
+          <td>${esc(road.roadName)}</td>
+        </tr>
+        <tr>
+          <th>Perkiraan jenis jalan</th>
+          <td style="color:${colour};font-weight:bold">${esc(ROAD_CLASS_LABEL[road.indicatedClass])}</td>
+        </tr>
+        <tr>
+          <th>Dasar perkiraan</th>
+          <td>${esc(road.classBasis)}</td>
+        </tr>
+        <tr>
+          <th>Usaha terdekat di ruas jalan yang sama</th>
+          <td>${esc(road.businessesOnSameRoad)} dari ${esc(road.businessesConsidered)}</td>
+        </tr>
+      </table>
+      ${
+        road.notes.length > 0
+          ? `<div class="warning"><ul>${road.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`
+          : ''
+      }`;
+}
+
 /**
  * The property under assessment.
  *
@@ -119,7 +164,7 @@ function premisesSection(report: StructuredReport): string {
       : `${cost.occupancyCostRatio}% dari pendapatan setahun`;
 
   return `
-      <h2>5. Properti yang Dinilai</h2>
+      <h2>6. Properti yang Dinilai</h2>
       <div class="panel">
         <strong>${esc(premises.name)}</strong><br>
         ${esc(premises.address)}
@@ -179,7 +224,7 @@ function sensitivitySection(report: StructuredReport): string {
       : '#27ae60';
 
   return `
-      <h2>8. Titik Impas &amp; Uji Ketahanan</h2>
+      <h2>9. Titik Impas &amp; Uji Ketahanan</h2>
       <div class="panel">
         <table style="margin-top:0">
           <tr>
@@ -228,7 +273,7 @@ function competitorSection(report: StructuredReport): string {
   const competitors = report.competitors ?? [];
   if (competitors.length === 0) {
     return `
-      <h2>9. Pesaing di Sekitar Lokasi</h2>
+      <h2>10. Pesaing di Sekitar Lokasi</h2>
       <div class="panel"><em>${UNAVAILABLE}</em></div>`;
   }
 
@@ -246,7 +291,7 @@ function competitorSection(report: StructuredReport): string {
     .join('');
 
   return `
-      <h2>9. Pesaing di Sekitar Lokasi</h2>
+      <h2>10. Pesaing di Sekitar Lokasi</h2>
       <p class="note">
         ${competitors.length} pesaing terdekat, diurutkan dari yang paling dekat.
         Jumlah ulasan menunjukkan seberapa ramai sebuah tempat — bukan ukuran mutlak,
@@ -290,7 +335,7 @@ function scoreSection(report: StructuredReport): string {
     .join('');
 
   return `
-      <h2>10. Rincian Skor</h2>
+      <h2>11. Rincian Skor</h2>
       <p class="note">
         Skor keseluruhan adalah rata-rata sepuluh dimensi di bawah ini. Setiap skor
         disertai dasar penilaiannya, sehingga Anda dapat menilai sendiri apakah
@@ -378,15 +423,17 @@ export function renderReportHtml(report: StructuredReport): string {
 
       ${locationContextSection(report)}
 
+      ${roadSection(report)}
+
       ${premisesSection(report)}
 
-      <h2>6. Kandidat Lokasi</h2>
+      <h2>7. Kandidat Lokasi</h2>
       <div class="panel">
         <strong>Teridentifikasi:</strong> ${esc(report.candidates?.totalIdentified)} &nbsp;|&nbsp;
         <strong>Masuk daftar pendek:</strong> ${esc(report.candidates?.shortlistedCount)}
       </div>
 
-      <h2>7. Skenario Finansial</h2>
+      <h2>8. Skenario Finansial</h2>
       <table>
         <thead>
           <tr>
@@ -411,14 +458,14 @@ export function renderReportHtml(report: StructuredReport): string {
 
       ${scoreSection(report)}
 
-      <h2>11. Hipotesis Celah Pasar</h2>
+      <h2>12. Hipotesis Celah Pasar</h2>
       <div class="panel">
         <strong>Rekomendasi Keseluruhan:</strong>
         ${esc(analysis.marketGap?.overallRecommendation)}
         <p>${esc(analysis.marketGap?.summary)}</p>
       </div>
 
-      <h2>12. Daftar Periksa Validasi Lapangan</h2>
+      <h2>13. Daftar Periksa Validasi Lapangan</h2>
       <ul>${list(synthesis?.validationChecklist)}</ul>
 
       <div class="disclaimer">

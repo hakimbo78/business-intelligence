@@ -63,6 +63,8 @@ interface GeocodeV4Response {
     placeId?: string;
     formattedAddress?: string;
     location?: { latitude?: number; longitude?: number };
+    granularity?: string;
+    addressComponents?: Array<{ longText?: string; types?: string[] }>;
   }>;
 }
 
@@ -267,6 +269,10 @@ export class GoogleMapsProvider implements LocationProvider {
           longitude: first.location.longitude ?? 0,
         },
         placeId: first.placeId ?? '',
+        // The road name carries real information in Indonesia: "Gang" is an
+        // alley, "Raya" is usually a through road.
+        roadName: first.addressComponents?.find((c) => c.types?.includes('route'))?.longText,
+        precision: first.granularity,
       },
       provenance: this.provenance('geocoding'),
     };

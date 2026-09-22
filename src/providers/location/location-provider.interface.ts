@@ -44,6 +44,10 @@ export interface GeocodingResult {
   formattedAddress: string;
   location: Coordinates;
   placeId: string;
+  /** The road the address sits on, when the provider reports one. */
+  roadName?: string;
+  /** How precisely the address was located, e.g. ROOFTOP. */
+  precision?: string;
 }
 
 export interface RouteResult {

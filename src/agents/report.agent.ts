@@ -5,6 +5,22 @@ import { logger } from '../lib/logger.js';
 import { prisma } from '../config/database.js';
 import { REPORT_DISCLAIMER_EN } from '../lib/disclaimer.js';
 import { summariseLocationCost, type LocationCostSummary } from '../lib/location-cost.js';
+import { describeRoad, type RoadContext } from '../lib/road-context.js';
+
+/**
+ * Pull the road out of a free-text address.
+ *
+ * The premises address is stored as the client typed it, so the road is
+ * whatever precedes the house number.
+ */
+function extractRoadName(address: string | null | undefined): string | null {
+  // Report generation must not fall over on an address that is missing.
+  if (!address) return null;
+
+  const match = address.match(/^([^,]*?)(?:\s+No\.?\s*\d.*)?(?:,|$)/i);
+  const road = match?.[1]?.trim();
+  return road && road.length > 3 ? road : null;
+}
 
 /** Distance in metres between two coordinates. */
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -50,6 +66,11 @@ export interface StructuredReport {
     confidence: string;
     cost: LocationCostSummary;
   } | null;
+  /**
+   * What kind of road the premises faces. A shopfront on a through road and
+   * one down a gang are different businesses.
+   */
+  road: RoadContext | null;
   synthesis: ReportSynthesis;
   candidates: {
     totalIdentified: number;
@@ -213,7 +234,18 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
     const scoring = project.scoringAnalysis as { dimensions?: Array<{ dimension: string; score: number; evidence: string }> } | null;
     const scoreBreakdown = scoring?.dimensions ?? [];
 
+    // Road context costs nothing extra: it reads the road name already returned
+    // when the premises was geocoded, and the competitor addresses already held.
     const assessed = project.candidates.length === 1 ? project.candidates[0] : null;
+    const road = assessed
+      ? describeRoad({
+          roadName: extractRoadName(assessed.address),
+          addressPrecision: null,
+          nearbyAddresses: project.competitors
+            .map((c) => c.address)
+            .filter((a): a is string => Boolean(a)),
+        })
+      : null;
     const premises = assessed
       ? {
           name: assessed.name,
@@ -235,6 +267,7 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       },
       disclaimer: REPORT_DISCLAIMER_EN,
       premises,
+      road,
       synthesis,
       candidates: {
         totalIdentified,

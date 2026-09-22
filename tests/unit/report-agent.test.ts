@@ -37,9 +37,11 @@ describe('Report Agent', () => {
       businessProfile: { businessName: 'Test Business' },
       locationSearch: { targetCity: 'Jakarta' },
       candidates: [
-        { name: 'Shortlisted 1', estimatedRent: 1000, propertySize: 100 }
+        { name: 'Shortlisted 1', address: 'Jl. Delima Raya No. 85, Depok', estimatedRent: 1000, propertySize: 100 }
       ],
-      competitors: [],
+      competitors: [
+        { name: 'Warung A', address: 'Jl. Delima Raya No. 12, Depok', category: 'restaurant', latitude: -6.4, longitude: 106.8, rating: 4.5, reviewCount: 30 },
+      ],
       scoringAnalysis: { overallScore: 85 }
     });
 
@@ -90,5 +92,26 @@ describe('Report Agent', () => {
     (prisma.report.findFirst as any).mockResolvedValueOnce(null);
     const report = await reportAgent.getLatestReport('mock-project-id');
     expect(report).toBeNull();
+  });
+
+  it('should describe the road the premises faces', async () => {
+    (prisma.project.findUnique as any).mockResolvedValueOnce({
+      id: 'mock-project-id',
+      name: 'Test Project',
+      businessProfile: { businessName: 'Test Business' },
+      locationSearch: { targetCity: 'Depok' },
+      candidates: [
+        { name: 'Ruko', address: 'Gang Swadaya No. 3, Depok', estimatedRent: 1000, propertySize: 50 },
+      ],
+      competitors: [],
+      scoringAnalysis: { dimensions: [] },
+    });
+    (prisma.locationCandidate.count as any).mockResolvedValueOnce(1);
+
+    const result = await reportAgent.generateReport('mock-project-id');
+
+    // A shopfront down a gang is a different business from one on a through road.
+    expect(result.road?.indicatedClass).toBe('ALLEY');
+    expect(result.road?.notes.join(' ')).toContain('lebar jalan');
   });
 });
