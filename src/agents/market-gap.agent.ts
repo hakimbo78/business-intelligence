@@ -35,6 +35,7 @@ export class MarketGapAgent {
 
     // 2. Prepare AI prompt
     const prompt = `You are a Market Gap Analyst Agent for a Location Decision Intelligence platform.
+Write every free-text field in Indonesian (Bahasa Indonesia); the reader is an Indonesian business owner. Enum values stay in English.
 Your task is to synthesize the following Competition Analysis and Demand Analysis to find market gaps and produce evidence-backed hypotheses.
 Each hypothesis MUST include field validation requirements.
 

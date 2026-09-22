@@ -138,19 +138,39 @@ describe('Financial Agent', () => {
 
     const result = await financialAgent.analyzeFinancials('mock-project-id');
 
-    // Operating days, gross margin, and the rent standing in from the ceiling.
-    expect(result.assumptions).toHaveLength(3);
+    // Operating days, gross margin, the rent standing in from the ceiling, and
+    // the warning that operating costs were not deducted.
+    expect(result.assumptions).toHaveLength(4);
     expect(result.assumptions.join(' ')).toContain('ASSUMPTION');
   });
 
-  it('should report no assumptions when every figure is a stated fact', async () => {
+  it('should warn that operating costs were not deducted', async () => {
     (projectService.getProject as any).mockResolvedValueOnce({
       ...completeProject,
       candidates: [{ estimatedRent: 5_000_000, propertySize: 200 }],
     });
 
     const result = await financialAgent.analyzeFinancials('mock-project-id');
+
+    // Every other figure is a stated fact, so this is the only caveat left —
+    // and it must always be there while operating costs are unknown.
+    expect(result.assumptions).toHaveLength(1);
+    expect(result.assumptions[0]).toContain('SEWA SAJA');
+    expect(result.assumptions[0]).toContain('gaji karyawan');
+  });
+
+  it('should drop the warning once operating costs are supplied', async () => {
+    (projectService.getProject as any).mockResolvedValueOnce({
+      ...completeProject,
+      businessProfile: { ...completeProject.businessProfile, operatingCostMonthly: 20_000_000 },
+      candidates: [{ estimatedRent: 5_000_000, propertySize: 200 }],
+    });
+
+    const result = await financialAgent.analyzeFinancials('mock-project-id');
+
     expect(result.assumptions).toEqual([]);
+    // 59,150,000 gross − 5,000,000 rent − 20,000,000 operating costs.
+    expect(result.scenarios[1].operatingProfit).toBe(34_150_000);
   });
 
   it('should throw error if project is missing required data', async () => {

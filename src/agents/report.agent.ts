@@ -6,6 +6,18 @@ import { prisma } from '../config/database.js';
 import { REPORT_DISCLAIMER_EN } from '../lib/disclaimer.js';
 import { summariseLocationCost, type LocationCostSummary } from '../lib/location-cost.js';
 
+/** Distance in metres between two coordinates. */
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3;
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dp = ((lat2 - lat1) * Math.PI) / 180;
+  const dl = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export const reportSynthesisSchema = z.object({
   executiveSummary: z.string().describe('A strong, single-paragraph executive summary of the business intelligence analysis.'),
   methodology: z.string().describe('A brief explanation of how the data was gathered and analyzed.'),
@@ -44,6 +56,21 @@ export interface StructuredReport {
     shortlistedCount: number;
     shortlisted: any[];
   };
+  /**
+   * The competitors actually found, named.
+   *
+   * "30 direct competitors" is a claim; a list with names, distances and review
+   * counts is evidence the customer can go and check.
+   */
+  competitors: Array<{
+    name: string;
+    category: string;
+    distanceMeters: number | null;
+    rating: number | null;
+    reviewCount: number | null;
+  }>;
+  /** The ten scoring dimensions with the evidence behind each. */
+  scoreBreakdown: Array<{ dimension: string; score: number; evidence: string }>;
   analysis: {
     demand: any;
     competition: any;
@@ -109,6 +136,20 @@ export class ReportAgent {
     // We pass a summary of the data to the LLM so it doesn't get overwhelmed with token limits,
     // but enough to write a good executive summary.
     const prompt = `You are a Report Synthesis Agent.
+
+WRITE EVERY FIELD IN INDONESIAN (Bahasa Indonesia). The reader is an Indonesian
+business owner. Use plain business Indonesian, not translated English idiom.
+Keep figures in Rupiah formatted as Rp 1.234.567.
+
+Ground every statement in the data below. Do not soften a bad result: if the
+scenarios lose money, say so plainly in the first sentence. Never promise an
+outcome — avoid "pasti berhasil", "dijamin", "lokasi terbaik".
+
+The validation checklist must be specific to THIS location and business, not
+generic advice. Good items name what to count, when, and where: jumlah orang
+lewat pada jam 07.00-09.00 di depan properti, tarif sewa aktual dari pemilik,
+biaya deposit dan ketentuan sewa, ketersediaan parkir, riwayat banjir di ruas
+jalan tersebut.
 Review the following business intelligence data and write a highly professional Executive Summary, methodology, key assumptions, and a field validation checklist.
 
 BUSINESS PROFILE:
@@ -141,6 +182,32 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
     const baseRevenue =
       financial?.scenarios?.find((s) => s.scenarioName === 'BASE')?.monthlyRevenue ?? null;
 
+    // Name the competitors rather than only counting them. Nearest first, since
+    // proximity is what makes one matter.
+    const assessedForDistance = project.candidates[0] ?? null;
+    const competitors = project.competitors
+      .map((c) => ({
+        name: c.name,
+        category: c.category,
+        distanceMeters: assessedForDistance
+          ? Math.round(
+              haversineMeters(
+                assessedForDistance.latitude,
+                assessedForDistance.longitude,
+                c.latitude,
+                c.longitude
+              )
+            )
+          : null,
+        rating: c.rating,
+        reviewCount: c.reviewCount,
+      }))
+      .sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity))
+      .slice(0, 20);
+
+    const scoring = project.scoringAnalysis as { dimensions?: Array<{ dimension: string; score: number; evidence: string }> } | null;
+    const scoreBreakdown = scoring?.dimensions ?? [];
+
     const assessed = project.candidates.length === 1 ? project.candidates[0] : null;
     const premises = assessed
       ? {
@@ -169,6 +236,8 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
         shortlistedCount: project.candidates.length,
         shortlisted: project.candidates,
       },
+      competitors,
+      scoreBreakdown,
       analysis: {
         demand: project.demandAnalysis,
         competition: project.competitionAnalysis,

@@ -39,6 +39,7 @@ export class DemandAgent {
 
     // 3. Prepare AI prompt
     const prompt = `You are a Demand Analyst Agent for a Location Decision Intelligence platform.
+Write every free-text field in Indonesian (Bahasa Indonesia); the reader is an Indonesian business owner. Enum values stay in English.
 Your task is to analyze the demographic data and search interest trends to evaluate the demand potential for the given business.
 Determine the demandSignal, customerFit, confidence, and provide evidence.
 

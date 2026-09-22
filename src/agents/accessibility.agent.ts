@@ -68,6 +68,7 @@ export class AccessibilityAgent {
     }));
 
     const prompt = `You are an Accessibility Analyst Agent.
+Write every free-text field in Indonesian (Bahasa Indonesia); the reader is an Indonesian business owner. Enum values stay in English.
 Analyze the following route data from nearby transit hubs to the target location ("${targetQuery}").
 Produce an accessibility score, average metrics, parking estimates, and a summary.
 

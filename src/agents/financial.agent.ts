@@ -6,6 +6,7 @@ import {
   findMissingFinancialInputs,
   describeFinancialAssumptions,
   describeRentBasis,
+  describeOperatingCostBasis,
   resolveRent,
   ASSUMED_OPERATING_DAYS,
   ASSUMED_GROSS_MARGIN,
@@ -90,7 +91,8 @@ export class FinancialAgent {
       averageTransaction: overrides?.averageTransaction ?? bp.currentAverageTransaction ?? 0,
       operatingDays: overrides?.operatingDays ?? bp.operatingDays ?? ASSUMED_OPERATING_DAYS,
       grossMargin: overrides?.grossMargin ?? bp.grossMargin ?? ASSUMED_GROSS_MARGIN,
-      operatingCostMonthly: overrides?.operatingCostMonthly ?? 0,
+      operatingCostMonthly:
+        overrides?.operatingCostMonthly ?? bp.operatingCostMonthly ?? 0,
       initialInvestment: overrides?.initialInvestment ?? ls.estimatedInitialInvestment ?? 0,
     };
 
@@ -104,6 +106,7 @@ export class FinancialAgent {
       assumptions: [
         ...describeFinancialAssumptions(project),
         ...describeRentBasis(resolvedRent.basis, premises !== null),
+        ...describeOperatingCostBasis(inputs.operatingCostMonthly),
       ],
     };
 

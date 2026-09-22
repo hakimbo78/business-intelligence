@@ -149,6 +149,27 @@ export function resolveRent(sources: {
   return { rent: 0, basis: 'NONE' };
 }
 
+/**
+ * The warning that must accompany every operating profit figure.
+ *
+ * `operatingCostMonthly` defaults to zero, so operating profit is gross profit
+ * less rent only — no staff, utilities or supplies. A restaurant turning over
+ * Rp 97,500,000 a month cannot run on rent alone, so without this the payback
+ * period reads roughly twice as good as reality, in every report, in the same
+ * direction.
+ */
+export function describeOperatingCostBasis(operatingCostMonthly: number): string[] {
+  if (operatingCostMonthly > 0) return [];
+
+  return [
+    'PENTING: Laba operasional di laporan ini adalah laba kotor dikurangi SEWA SAJA. ' +
+      'Biaya operasional lain — gaji karyawan, listrik, air, gas, bahan habis pakai, ' +
+      'pemasaran, perawatan — BELUM dikurangkan karena tidak disediakan. ' +
+      'Laba dan periode balik modal yang sebenarnya akan lebih rendah, sering kali jauh lebih rendah. ' +
+      'Hitung biaya operasional bulanan Anda dan kurangkan dari angka laba sebelum mengambil keputusan.',
+  ];
+}
+
 /** State the basis in the report's assumption list (DEVELOPMENT_RULES.md §11). */
 export function describeRentBasis(basis: RentBasis, hadPremises: boolean): string[] {
   switch (basis) {

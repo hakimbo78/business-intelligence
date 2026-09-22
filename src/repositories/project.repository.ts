@@ -15,6 +15,7 @@ export interface CreateProjectInput {
     estimatedDailyCustomers?: number;
     operatingDays?: number;
     grossMargin?: number;
+    operatingCostMonthly?: number;
   };
   locationSearch?: {
     targetCity: string;
@@ -51,6 +52,7 @@ export class ProjectRepository {
           estimatedDailyCustomers: input.businessProfile.estimatedDailyCustomers,
           operatingDays: input.businessProfile.operatingDays,
           grossMargin: input.businessProfile.grossMargin,
+          operatingCostMonthly: input.businessProfile.operatingCostMonthly,
         }
       };
     }

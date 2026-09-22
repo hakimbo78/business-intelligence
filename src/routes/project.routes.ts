@@ -161,6 +161,7 @@ export async function projectRoutes(app: FastifyInstance) {
       estimatedDailyCustomers?: number;
       operatingDays?: number;
       grossMargin?: number;
+      operatingCostMonthly?: number;
     };
   }>('/:id/financial-inputs', async (request, reply) => {
     try {
@@ -174,6 +175,7 @@ export async function projectRoutes(app: FastifyInstance) {
         'currentAverageTransaction',
         'estimatedDailyCustomers',
         'operatingDays',
+        'operatingCostMonthly',
       ] as const;
 
       for (const field of positiveFields) {
@@ -217,7 +219,8 @@ export async function projectRoutes(app: FastifyInstance) {
         body.currentAverageTransaction !== undefined ||
         body.estimatedDailyCustomers !== undefined ||
         body.operatingDays !== undefined ||
-        body.grossMargin !== undefined
+        body.grossMargin !== undefined ||
+        body.operatingCostMonthly !== undefined
       ) {
         if (!project.businessProfile) {
           return reply.status(409).send({ error: 'Project has no business profile to update' });
@@ -229,6 +232,7 @@ export async function projectRoutes(app: FastifyInstance) {
             estimatedDailyCustomers: body.estimatedDailyCustomers,
             operatingDays: body.operatingDays,
             grossMargin: body.grossMargin,
+            operatingCostMonthly: body.operatingCostMonthly,
           },
         });
       }

@@ -60,6 +60,7 @@ export class CompetitionAgent {
     const competitorSummary = allCompetitors.map(c => ({ name: c.name, category: c.category }));
 
     const prompt = `You are a Competition Analyst Agent.
+Write every free-text field in Indonesian (Bahasa Indonesia); the reader is an Indonesian business owner. Enum values stay in English.
 Analyze the following business profile and the discovered competitors in its target area.
 Classify the density of the market (LOW, MEDIUM, HIGH) and identify direct vs indirect competitors.
 

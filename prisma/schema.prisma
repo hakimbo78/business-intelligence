@@ -156,6 +156,10 @@ model BusinessProfile {
   estimatedDailyCustomers     Int?     @map("estimated_daily_customers")
   operatingDays               Int?     @map("operating_days")
   grossMargin                 Float?   @map("gross_margin")
+  /// Monthly operating cost excluding rent: staff, utilities, supplies.
+  /// Without it, operating profit is gross profit less rent only and every
+  /// report reads optimistically in the same direction.
+  operatingCostMonthly        Float?   @map("operating_cost_monthly")
   createdAt                   DateTime @default(now()) @map("created_at")
   updatedAt                   DateTime @updatedAt @map("updated_at")
 

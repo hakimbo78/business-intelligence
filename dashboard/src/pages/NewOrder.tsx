@@ -27,6 +27,9 @@ export const NewOrder: React.FC = () => {
     estimatedInitialInvestment: '',
     averageTransaction: '',
     dailyCustomers: '',
+    grossMargin: '',
+    operatingDays: '',
+    operatingCostMonthly: '',
     address: '',
     targetArea: '',
     latitude: '',
@@ -67,6 +70,12 @@ export const NewOrder: React.FC = () => {
             businessCategory: formData.businessCategory,
             currentAverageTransaction: Number(formData.averageTransaction),
             estimatedDailyCustomers: Number(formData.dailyCustomers),
+            // Supplied rather than assumed: both move the payback period a lot.
+            grossMargin: Number(formData.grossMargin) / 100,
+            operatingDays: Number(formData.operatingDays),
+            ...(formData.operatingCostMonthly
+              ? { operatingCostMonthly: Number(formData.operatingCostMonthly) }
+              : {}),
           },
           locationSearch: {
             targetCity: location,
@@ -208,6 +217,56 @@ export const NewOrder: React.FC = () => {
               onChange={handleChange}
               required
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Input
+                name="grossMargin"
+                label="Margin Kotor (%)"
+                type="number"
+                min="1"
+                max="100"
+                placeholder="mis. 65"
+                onChange={handleChange}
+                required
+              />
+              <p className="text-xs text-muted mt-2">
+                Persentase dari penjualan yang tersisa setelah biaya barang/bahan.
+                Restoran umumnya 60–70%, laundry 50–70%, ritel 20–40%.
+              </p>
+            </div>
+            <div>
+              <Input
+                name="operatingDays"
+                label="Hari Buka per Bulan"
+                type="number"
+                min="1"
+                max="31"
+                placeholder="mis. 30"
+                onChange={handleChange}
+                required
+              />
+              <p className="text-xs text-muted mt-2">
+                Berapa hari usaha ini buka dalam sebulan.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <Input
+              name="operatingCostMonthly"
+              label="Biaya Operasional Bulanan di luar Sewa (Rp) — opsional"
+              type="number"
+              min="1"
+              placeholder="mis. 20000000"
+              onChange={handleChange}
+            />
+            <p className="text-xs text-muted mt-2">
+              Gaji karyawan, listrik, air, gas, bahan habis pakai, pemasaran.
+              <strong> Jika dikosongkan, laba operasional di laporan hanya dikurangi sewa
+              dan akan tampak lebih besar dari kenyataan.</strong>
+            </p>
           </div>
 
           {modelType === 'validation' && (

@@ -40,6 +40,7 @@ export class ScoringAgent {
 
     // 3. Use AI to EXPLAIN the scores (not determine them)
     const prompt = `You are a Scoring Explanation Agent.
+Write every free-text field in Indonesian (Bahasa Indonesia); the reader is an Indonesian business owner. Enum values stay in English.
 The following deterministic scores have already been calculated. Your job is to provide a concise narrative summary explaining the overall scoring.
 Do NOT change any scores. Only explain them.
 
