@@ -145,6 +145,18 @@ src/
 └── server.ts            # HTTP server entry point
 ```
 
+### Google Maps APIs
+
+The provider calls the current REST APIs — **Geocoding v4**, **Places (New)**
+and **Routes** — rather than the `@googlemaps/google-maps-services-js` SDK,
+which speaks only the legacy endpoints. Those legacy endpoints require a
+billing account even for their free tier; the current ones also accept a
+[Maps Platform demo key](https://developers.google.com/maps/demo-key), so the
+platform can be exercised before billing is set up.
+
+A demo key is for prototyping only and has daily caps. Production needs a
+billed, restricted key (§26).
+
 ### Provider Abstraction
 
 ```
@@ -312,7 +324,7 @@ Rate limiting is global (300 req/min per user, 10/min on sign-in).
 | `OWNER_EMAILS` | Unless `AUTH_DISABLED` | — | Comma-separated addresses granted the OWNER role |
 | `AUTH_DISABLED` | No | `false` | Local development only; refused in production |
 | `MAP_PROVIDER` | No | `mock` | Location provider (mock/google) |
-| `GOOGLE_MAPS_API_KEY` | When `MAP_PROVIDER=google` | — | Google Maps API key |
+| `GOOGLE_MAPS_API_KEY` | When `MAP_PROVIDER=google` | — | Google Maps API key (a Platform demo key works) |
 | `AI_PROVIDER` | No | `mock` | LLM provider (mock/gemini/openrouter) |
 | `GEMINI_API_KEY` | When `AI_PROVIDER=gemini` | — | Google Gemini API key |
 | `GEMINI_MODEL` | No | `gemini-2.5-flash` | Gemini model id |

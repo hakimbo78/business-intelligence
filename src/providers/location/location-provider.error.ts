@@ -25,7 +25,16 @@ export class LocationProviderError extends Error {
 }
 
 interface GoogleErrorShape {
-  response?: { status?: number; data?: { status?: string; error_message?: string } };
+  response?: {
+    status?: number;
+    data?: {
+      // Legacy endpoints report the problem at the top level...
+      status?: string;
+      error_message?: string;
+      // ...the current REST APIs nest it under `error`.
+      error?: { status?: string; message?: string; code?: number };
+    };
+  };
   message?: string;
 }
 
@@ -34,19 +43,30 @@ interface GoogleErrorShape {
  */
 export function describeGoogleMapsFailure(error: unknown, operation: string): LocationProviderError {
   const err = error as GoogleErrorShape;
-  const status = err?.response?.data?.status;
-  const detail = err?.response?.data?.error_message;
+  const data = err?.response?.data;
+  const httpStatus = err?.response?.status;
 
-  if (status === 'REQUEST_DENIED') {
+  const status = data?.status ?? data?.error?.status;
+  const detail = data?.error_message ?? data?.error?.message;
+
+  // The current APIs answer 403 PERMISSION_DENIED where the legacy ones said
+  // REQUEST_DENIED; both mean the key is not authorised for this call.
+  const denied =
+    status === 'REQUEST_DENIED' ||
+    status === 'PERMISSION_DENIED' ||
+    (httpStatus === 403 && status !== 'OVER_QUERY_LIMIT');
+
+  if (denied) {
     return new LocationProviderError(
       `Google Maps refused the ${operation} request. ${detail ?? 'The API key is not authorised.'} ` +
-        'Check that billing is enabled on the Google Cloud project and that the required API is turned on. ' +
+        'Check that the required API is enabled for this key. A Maps Platform demo key works ' +
+        'with Geocoding v4, Places (New) and Routes, but not the legacy endpoints. ' +
         'Set MAP_PROVIDER=mock to work without Google Maps.',
       { provider: 'GoogleMapsProvider', operation, isConfigurationProblem: true, cause: error }
     );
   }
 
-  if (status === 'OVER_QUERY_LIMIT' || err?.response?.status === 429) {
+  if (status === 'OVER_QUERY_LIMIT' || status === 'RESOURCE_EXHAUSTED' || httpStatus === 429) {
     return new LocationProviderError(
       `Google Maps quota exceeded on ${operation}. ${detail ?? ''}`.trim(),
       { provider: 'GoogleMapsProvider', operation, isConfigurationProblem: true, cause: error }
