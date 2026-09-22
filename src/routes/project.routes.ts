@@ -16,6 +16,8 @@ import { CreateProjectInput } from '../repositories/project.repository.js';
 import { jobService } from '../queue/job.service.js';
 import { premisesService, type AttachPremisesInput } from '../services/premises.service.js';
 import { paymentService, PaymentError } from '../services/payment.service.js';
+import { renderReportPdf } from '../services/report-pdf.service.js';
+import { canReceiveReport } from '../lib/report-visibility.js';
 import { priceList } from '../lib/pricing.js';
 import { requireAuth, requireProjectAccess, requireOwner } from '../middleware/auth.middleware.js';
 import { PropertyNormalizationError } from '../lib/property-normalizer.js';
@@ -492,10 +494,44 @@ export async function projectRoutes(app: FastifyInstance) {
       if (!report) {
         return reply.status(404).send({ error: 'Report not found' });
       }
+
+      // Only an approved report may reach the client (BUILD_ROADMAP.md Phase 14).
+      // The owner sees every draft, since reviewing them is their job.
+      if (!canReceiveReport(request.user!.role, report.status)) {
+        // 404, not 403: a client has no business learning that a draft exists.
+        return reply.status(404).send({ error: 'Report not found' });
+      }
+
       return reply.send(report);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to get report');
       return reply.status(500).send({ error: (error as Error).message });
+    }
+  });
+
+  /** The deliverable itself. Same visibility rule as the report JSON. */
+  app.get<{ Params: { id: string } }>('/:id/report.pdf', async (request, reply) => {
+    try {
+      const report = await reportAgent.getLatestReport(request.params.id);
+      if (!report) {
+        return reply.status(404).send({ error: 'Report not found' });
+      }
+
+      if (!canReceiveReport(request.user!.role, report.status)) {
+        // 404, not 403: a client has no business learning that a draft exists.
+        return reply.status(404).send({ error: 'Report not found' });
+      }
+
+      const pdf = await renderReportPdf(report.contentJson);
+      const filename = `location-intelligence-${request.params.id}.pdf`;
+
+      return reply
+        .header('Content-Type', 'application/pdf')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(pdf);
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to render report PDF');
+      return reply.status(500).send({ error: 'Could not produce the PDF' });
     }
   });
 

@@ -123,6 +123,27 @@ export const ProjectDetails: React.FC = () => {
 
   const handleApprove = () => runAction('approve');
 
+  const downloadPdf = async () => {
+    setActionError(null);
+    try {
+      // The endpoint needs the bearer token, so the browser cannot simply
+      // follow a link: fetch the bytes and hand them to a temporary anchor.
+      const res = await fetch(`/api/projects/${id}/report.pdf`, {
+        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+      });
+      if (!res.ok) throw new Error('Could not download the report');
+
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `location-intelligence-${id}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Download failed');
+    }
+  };
+
   const handleReject = () => {
     const reason = prompt('Reason for rejection:');
     if (!reason) return;
@@ -156,8 +177,8 @@ export const ProjectDetails: React.FC = () => {
           </div>
         )}
 
-        {report?.status === 'APPROVED' && (
-          <Button variant="secondary">Download PDF</Button>
+        {(report?.status === 'APPROVED' || report?.status === 'DELIVERED') && (
+          <Button variant="secondary" onClick={downloadPdf}>Download PDF</Button>
         )}
       </div>
 

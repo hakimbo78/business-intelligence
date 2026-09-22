@@ -178,6 +178,30 @@ fails immediately instead of after eight billed agent calls.
 `POST /api/projects/:id/approve` moves it past `REVIEW`
 (PROJECT_MASTER_SPEC.md §35, BUILD_ROADMAP.md Phase 14).
 
+### Payment and Delivery
+
+Anyone can sign up, but the pipeline spends real money, so an order is gated:
+
+```
+order created  → invoice raised automatically
+client transfers (manual bank transfer)
+client confirms → owner's verification queue
+owner approves  → analysis starts
+report produced → QA → owner approves the report
+                → client can read it and download the PDF
+```
+
+`POST /generate-full-report` answers **402** until the payment is `APPROVED`.
+A client merely claiming to have paid is not enough — only the owner matching
+the transfer against their statement opens the gate.
+
+**A client can only see an approved report.** `canReceiveReport` states that
+rule once and both the JSON and PDF endpoints apply it; an unapproved report
+answers 404, so a client never learns a draft exists.
+
+Prices and bank details come from the environment, and a quote reports whether
+it is still a placeholder.
+
 ### The Three Products
 
 An order says which product it is (`projectType`), because they take different
@@ -230,7 +254,13 @@ annually is divided into a monthly figure and flagged `rentIsDerived`.
 | `POST` | `/api/projects/:id/generate-full-report` | Enqueue the full pipeline |
 | `GET` | `/api/projects/jobs/:jobId` | Job status, attempts and error |
 | `GET` | `/api/projects/:id/report` | Latest report with its review status |
-| `POST` | `/api/projects/:id/approve` \| `/reject` | Owner decision |
+| `POST` | `/api/projects/:id/approve` \| `/reject` | Owner decision on the report |
+| `GET` | `/api/projects/:id/report.pdf` | The deliverable, once approved |
+| `GET` | `/api/projects/prices` | Price list per product |
+| `GET` | `/api/projects/:id/payment` | Amount owed and where to transfer it |
+| `POST` | `/api/projects/:id/payment/confirm` | Client states they have transferred |
+| `GET` | `/api/projects/payments/pending` | Owner's verification queue |
+| `POST` | `/api/projects/:id/payment/approve` \| `/reject` | Owner verifies the transfer |
 | `GET` | `/api/properties/sources` | The permitted property sources |
 | `POST` | `/api/properties` | Submit a listing from a permitted source |
 | `POST` | `/api/properties/:id/verify` | Mark a listing as field-verified |
@@ -301,14 +331,15 @@ so a misconfiguration fails immediately rather than halfway through a customer's
 
 Recorded so nobody mistakes a gap for a finished feature:
 
-- **`VALIDATION` and `COMPARISON` orders cannot complete yet.** The pipeline
-  branches correctly and refuses an order with no premises attached, but nothing
-  turns the client's address into a candidate yet — that is the next piece of work.
 - **`AREA_SCOUTING` has no micro-area concept.** The funnel still produces POIs
   as candidates, not street segments or clusters. Until that exists, its output
   is not yet the deliverable this README describes.
-- **No cost control** (§22). API and token spend is neither estimated nor capped
-  before research runs.
+- **No cost control** (§22). API and token spend is neither estimated, recorded
+  nor capped, so the margin on a report is unknown.
+- **No deployment setup.** The app runs locally; there is no Dockerfile for it
+  and no production compose file yet.
+- **`COMPARISON` orders have no UI.** The pipeline supports them, but the order
+  form only offers validation and scouting.
 - **Scoring is per project, not per candidate.** `location_candidates.composite_score`
   is never populated.
 - **Dev dependency advisories** are pinned forward via `overrides` in
