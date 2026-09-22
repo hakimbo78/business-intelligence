@@ -104,15 +104,13 @@ export const ProjectDetails: React.FC = () => {
     setActionLoading(true);
     setActionError(null);
     try {
-      const res = await fetch(`/api/projects/${id}/${action}`, {
+      // Through api(), which sets Content-Type only when there is a body.
+      // Sending the header with no body made Fastify reject Approve as a
+      // malformed request.
+      await api(`/api/projects/${id}/${action}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
-        body: body ? JSON.stringify(body) : undefined,
+        ...(body ? { body: JSON.stringify(body) } : {}),
       });
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        throw new Error(payload.error ?? `Request failed with status ${res.status}`);
-      }
       await fetchReport();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Action failed.');

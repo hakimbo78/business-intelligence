@@ -116,3 +116,66 @@ export function describeFinancialAssumptions(project: FinancialInputSources): st
 
   return assumptions;
 }
+
+/**
+ * Where a rent figure came from.
+ *
+ * Rent is subtracted from operating profit, so it moves the payback period
+ * more than almost anything else. Tracking its source — rather than inferring
+ * it — is what lets the report state plainly which property was modelled.
+ */
+export type RentBasis = 'OVERRIDE' | 'PREMISES' | 'BUDGET_CEILING' | 'NONE';
+
+export interface ResolvedRent {
+  rent: number;
+  basis: RentBasis;
+}
+
+export function resolveRent(sources: {
+  override?: number;
+  premisesRent?: number | null;
+  budgetCeiling?: number | null;
+}): ResolvedRent {
+  if (sources.override !== undefined) {
+    return { rent: sources.override, basis: 'OVERRIDE' };
+  }
+  // The premises the client named is the fact of the case when it has a rent.
+  if (sources.premisesRent != null && sources.premisesRent > 0) {
+    return { rent: sources.premisesRent, basis: 'PREMISES' };
+  }
+  if (sources.budgetCeiling != null && sources.budgetCeiling > 0) {
+    return { rent: sources.budgetCeiling, basis: 'BUDGET_CEILING' };
+  }
+  return { rent: 0, basis: 'NONE' };
+}
+
+/** State the basis in the report's assumption list (DEVELOPMENT_RULES.md §11). */
+export function describeRentBasis(basis: RentBasis, hadPremises: boolean): string[] {
+  switch (basis) {
+    case 'PREMISES':
+      // The rent of the property being assessed: a fact, not an assumption.
+      return [];
+
+    case 'OVERRIDE':
+      return ['ASSUMPTION: rent was supplied as a what-if override, not taken from the premises.'];
+
+    case 'BUDGET_CEILING':
+      return hadPremises
+        ? [
+            'ASSUMPTION: the premises has no stated rent, so the maximum monthly rent from the ' +
+              'brief was used instead. That figure is a budget ceiling, not the rent of this ' +
+              'property, and must be verified before relying on these figures.',
+          ]
+        : [
+            'ASSUMPTION: no specific premises was supplied, so the maximum monthly rent from the ' +
+              'brief was used. Actual rent will differ and must be verified.',
+          ];
+
+    case 'NONE':
+      return [
+        'ASSUMPTION: no rent figure was available, so rent was modelled as zero. Operating ' +
+          'profit is therefore overstated and the payback period is optimistic. Obtain the ' +
+          'actual rent before relying on these figures.',
+      ];
+  }
+}

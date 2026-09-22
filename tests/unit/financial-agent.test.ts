@@ -5,6 +5,7 @@ import { prisma } from '@/config/database.js';
 
 const completeProject = {
   id: 'mock-project-id',
+  candidates: [] as Array<Record<string, unknown>>,
   businessProfile: {
     estimatedDailyCustomers: 100,
     currentAverageTransaction: 35000,
@@ -137,11 +138,17 @@ describe('Financial Agent', () => {
 
     const result = await financialAgent.analyzeFinancials('mock-project-id');
 
-    expect(result.assumptions).toHaveLength(2);
+    // Operating days, gross margin, and the rent standing in from the ceiling.
+    expect(result.assumptions).toHaveLength(3);
     expect(result.assumptions.join(' ')).toContain('ASSUMPTION');
   });
 
-  it('should report no assumptions when the customer supplied everything', async () => {
+  it('should report no assumptions when every figure is a stated fact', async () => {
+    (projectService.getProject as any).mockResolvedValueOnce({
+      ...completeProject,
+      candidates: [{ estimatedRent: 5_000_000, propertySize: 200 }],
+    });
+
     const result = await financialAgent.analyzeFinancials('mock-project-id');
     expect(result.assumptions).toEqual([]);
   });
@@ -154,5 +161,58 @@ describe('Financial Agent', () => {
 
     await expect(financialAgent.analyzeFinancials('mock-project-2'))
       .rejects.toThrow('Project mock-project-2 is missing required data');
+  });
+
+  it('should model the premises the client named, not their budget ceiling', async () => {
+    (projectService.getProject as any).mockResolvedValueOnce({
+      ...completeProject,
+      // The client asked us to assess THIS property at THIS rent.
+      candidates: [{ estimatedRent: 5_000_000, propertySize: 200 }],
+    });
+
+    const result = await financialAgent.analyzeFinancials('mock-project-id');
+    const base = result.scenarios[1];
+
+    // grossProfit 59,150,000 − rent 5,000,000 = 54,150,000.
+    // Using the 15,000,000 ceiling would give 44,150,000; ignoring rent
+    // altogether would give 59,150,000 and a far rosier payback.
+    expect(base.operatingProfit).toBe(54_150_000);
+    expect(result.rentPerSqm).toBe(25_000);
+  });
+
+  it('should warn when a premises has no stated rent', async () => {
+    (projectService.getProject as any).mockResolvedValueOnce({
+      ...completeProject,
+      candidates: [{ estimatedRent: null, propertySize: 200 }],
+    });
+
+    const result = await financialAgent.analyzeFinancials('mock-project-id');
+
+    // The ceiling is not this property's rent, and the report must say so.
+    expect(result.assumptions.join(' ')).toContain('budget ceiling, not the rent of this');
+    expect(result.assumptions.join(' ')).toContain('must be verified');
+  });
+
+  it('should say when the budget ceiling stood in for a real rent', async () => {
+    const result = await financialAgent.analyzeFinancials('mock-project-id');
+
+    // No premises supplied: the 15,000,000 ceiling is an assumption, not a fact.
+    expect(result.scenarios[1].operatingProfit).toBe(44_150_000);
+    expect(result.assumptions.join(' ')).toContain('maximum monthly rent');
+    expect(result.assumptions.join(' ')).toContain('must be verified');
+  });
+
+  it('should not treat several premises as one', async () => {
+    (projectService.getProject as any).mockResolvedValueOnce({
+      ...completeProject,
+      // A comparison order: picking one of them silently would model the
+      // wrong property, so the project-level figures stay on the ceiling.
+      candidates: [{ estimatedRent: 5_000_000 }, { estimatedRent: 9_000_000 }],
+    });
+
+    const result = await financialAgent.analyzeFinancials('mock-project-id');
+
+    expect(result.scenarios[1].operatingProfit).toBe(44_150_000);
+    expect(result.assumptions.join(' ')).toContain('no specific premises');
   });
 });

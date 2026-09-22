@@ -5,6 +5,8 @@ import { prisma } from '../config/database.js';
 import {
   findMissingFinancialInputs,
   describeFinancialAssumptions,
+  describeRentBasis,
+  resolveRent,
   ASSUMED_OPERATING_DAYS,
   ASSUMED_GROSS_MARGIN,
 } from '../lib/financial-inputs.js';
@@ -67,9 +69,23 @@ export class FinancialAgent {
     // `estimatedInitialInvestment` is the customer's planned Total Initial
     // Investment. `maximumInitialInvestment` is only a budget ceiling used to
     // filter candidates, and is deliberately NOT used here.
+    //
+    // When the client named the premises, its rent and size ARE the facts of
+    // the case. Falling back to their budget ceiling would model a different
+    // property: rent would drop out of operating profit entirely and the
+    // payback period would look far better than the premises deserves.
+    const premises = project.candidates.length === 1 ? project.candidates[0] : null;
+
+    const resolvedRent = resolveRent({
+      override: overrides?.rent,
+      premisesRent: premises?.estimatedRent,
+      budgetCeiling: ls.maximumMonthlyRent,
+    });
+
     const inputs: FinancialInputs = {
-      rent: overrides?.rent ?? ls.maximumMonthlyRent ?? 0,
-      propertySize: overrides?.propertySize ?? ls.targetPropertySize ?? 0,
+      rent: resolvedRent.rent,
+      propertySize:
+        overrides?.propertySize ?? premises?.propertySize ?? ls.targetPropertySize ?? 0,
       customersPerDay: overrides?.customersPerDay ?? bp.estimatedDailyCustomers ?? 0,
       averageTransaction: overrides?.averageTransaction ?? bp.currentAverageTransaction ?? 0,
       operatingDays: overrides?.operatingDays ?? bp.operatingDays ?? ASSUMED_OPERATING_DAYS,
@@ -85,7 +101,10 @@ export class FinancialAgent {
     // assumption rather than presented as fact (DEVELOPMENT_RULES.md §11).
     const analysis = {
       ...result,
-      assumptions: describeFinancialAssumptions(project),
+      assumptions: [
+        ...describeFinancialAssumptions(project),
+        ...describeRentBasis(resolvedRent.basis, premises !== null),
+      ],
     };
 
     // 5. Save to DB
