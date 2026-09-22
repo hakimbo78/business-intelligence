@@ -326,9 +326,34 @@ export async function projectRoutes(app: FastifyInstance) {
     { onRequest: requireOwner },
     async (request, reply) => {
       try {
-        return reply.send(
-          await paymentService.approve(request.params.id, request.user!.userId)
+        const payment = await paymentService.approve(request.params.id, request.user!.userId);
+
+        // A paid order should not sit idle waiting for another click, so the
+        // analysis is queued as part of approving. If the order is incomplete,
+        // say so now rather than letting the job fail later.
+        const project = await projectService.getProject(request.params.id);
+        const missing = findMissingFinancialInputs(project);
+        const candidateProblem = checkCandidateCount(
+          getProjectTypeConfig(project.projectType).type,
+          project.candidates.length
         );
+
+        if (missing.length > 0 || candidateProblem) {
+          return reply.send({
+            payment,
+            queued: false,
+            notReady: {
+              missingFinancialInputs: missing,
+              candidateProblem,
+            },
+          });
+        }
+
+        const jobId = await jobService.enqueueJob('GENERATE_REPORT', {
+          projectId: request.params.id,
+        });
+
+        return reply.send({ payment, queued: true, jobId });
       } catch (error) {
         if (error instanceof PaymentError) {
           return reply.status(400).send({ error: error.message });

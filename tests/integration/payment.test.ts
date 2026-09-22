@@ -162,11 +162,17 @@ describe('Payment gate', () => {
     });
 
     expect(approved.statusCode).toBe(200);
-    const payment = JSON.parse(approved.payload);
-    expect(payment.status).toBe('APPROVED');
-    expect(payment.approvedAt).not.toBeNull();
-    expect(payment.approvedBy).toBeTruthy();
+    const body = JSON.parse(approved.payload);
+    expect(body.payment.status).toBe('APPROVED');
+    expect(body.payment.approvedAt).not.toBeNull();
+    expect(body.payment.approvedBy).toBeTruthy();
 
+    // A paid order starts immediately; the owner does not click twice.
+    // This one is missing its premises, so approval reports that instead.
+    expect(body.queued).toBe(false);
+    expect(body.notReady.candidateProblem.reason).toContain('at least 1 premises');
+
+    // The gate itself is now open.
     const queued = await app.inject({
       method: 'POST',
       url: `/api/projects/${projectId}/generate-full-report`,

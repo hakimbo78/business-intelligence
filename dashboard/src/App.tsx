@@ -5,6 +5,7 @@ import { Home } from './pages/Home';
 import { NewOrder } from './pages/NewOrder';
 import { ProjectDetails } from './pages/ProjectDetails';
 import { Login } from './pages/Login';
+import { Payments } from './pages/Payments';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 
 /** Nothing behind this renders until we know who the caller is. */
@@ -21,6 +22,13 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
   if (!user) return <Navigate to="/login" replace />;
 
+  return <>{children}</>;
+}
+
+/** Verifying payments is the owner's job alone. */
+function OwnerOnly({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user?.role !== 'OWNER') return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -50,6 +58,14 @@ function AppRoutes() {
                     <ClientOnly>
                       <NewOrder />
                     </ClientOnly>
+                  }
+                />
+                <Route
+                  path="/payments"
+                  element={
+                    <OwnerOnly>
+                      <Payments />
+                    </OwnerOnly>
                   }
                 />
                 <Route path="/projects/:id" element={<ProjectDetails />} />

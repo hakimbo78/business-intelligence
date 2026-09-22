@@ -3,6 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getToken } from '../auth/AuthContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
+import { PaymentPanel, type PaymentInstructions } from '../components/PaymentPanel';
+import { useAuth } from '../auth/AuthContext';
+import { api } from '../auth/api';
 
 interface FinancialScenario {
   scenarioName: 'CONSERVATIVE' | 'BASE' | 'UPSIDE';
@@ -52,11 +55,23 @@ export const ProjectDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [payment, setPayment] = useState<PaymentInstructions | null>(null);
+  const { user } = useAuth();
+  const isOwner = user?.role === 'OWNER';
 
   // Read by the poller without making it a dependency, so the interval is
   // created once per project instead of being torn down on every state change.
   const hasReport = useRef(false);
   hasReport.current = report !== null;
+
+  const fetchPayment = useCallback(async () => {
+    try {
+      setPayment(await api<PaymentInstructions>(`/api/projects/${id}/payment`));
+    } catch {
+      // Older orders may predate payments; treat that as nothing to collect.
+      setPayment(null);
+    }
+  }, [id]);
 
   const fetchReport = useCallback(async () => {
     try {
@@ -77,12 +92,13 @@ export const ProjectDetails: React.FC = () => {
   }, [id]);
 
   useEffect(() => {
+    fetchPayment();
     fetchReport();
     const interval = setInterval(() => {
       if (!hasReport.current) fetchReport();
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [fetchReport]);
+  }, [fetchPayment, fetchReport]);
 
   const runAction = async (action: 'approve' | 'reject', body?: unknown) => {
     setActionLoading(true);
@@ -133,7 +149,7 @@ export const ProjectDetails: React.FC = () => {
           <p className="text-muted mt-2">Project ID: {id}</p>
         </div>
 
-        {report?.status === 'REVIEW' && (
+        {isOwner && report?.status === 'REVIEW' && (
           <div className="flex gap-4">
             <Button variant="danger" onClick={handleReject} isLoading={actionLoading}>Reject</Button>
             <Button variant="primary" onClick={handleApprove} isLoading={actionLoading}>Approve Report</Button>
@@ -151,7 +167,18 @@ export const ProjectDetails: React.FC = () => {
         </Card>
       )}
 
-      {!report ? (
+      {payment && payment.payment.status !== 'APPROVED' && !report ? (
+        isOwner ? (
+          <Card title="Awaiting payment">
+            <p className="text-muted">
+              This order is {payment.payment.status.replace(/_/g, ' ').toLowerCase()}.
+              Verify the transfer from the Payments queue to start the analysis.
+            </p>
+          </Card>
+        ) : (
+          <PaymentPanel instructions={payment} onConfirmed={fetchPayment} />
+        )
+      ) : !report ? (
         <Card className="flex flex-col items-center justify-center p-12 text-center">
           <span className="spinner mb-4" style={{ width: '2em', height: '2em' }}></span>
           <h3>AI is working...</h3>

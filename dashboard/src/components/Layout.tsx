@@ -23,6 +23,14 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Link to="/" className={`nav-item ${pathname === '/' ? 'active' : ''}`}>
             {isOwner ? 'All Orders' : 'My Orders'}
           </Link>
+          {isOwner && (
+            <Link
+              to="/payments"
+              className={`nav-item ${pathname === '/payments' ? 'active' : ''}`}
+            >
+              Payments
+            </Link>
+          )}
           {/* The owner reviews and approves; clients place the orders. */}
           {!isOwner && (
             <Link
