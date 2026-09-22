@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+import { api } from '../auth/api';
 
 interface Project {
   id: string;
@@ -15,6 +17,8 @@ export const Home: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isOwner = user?.role === 'OWNER';
 
   useEffect(() => {
     // Never substitute placeholder projects when the API is unreachable:
@@ -22,11 +26,7 @@ export const Home: React.FC = () => {
     // DEVELOPMENT_RULES.md §9. Surface the failure instead.
     const fetchProjects = async () => {
       try {
-        const response = await fetch('/api/projects');
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
-        }
-        setProjects(await response.json());
+        setProjects(await api<Project[]>('/api/projects'));
         setError(null);
       } catch (e) {
         setProjects([]);
@@ -52,10 +52,14 @@ export const Home: React.FC = () => {
     <div>
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1>Projects</h1>
-          <p className="text-muted mt-2">Manage your location intelligence analyses.</p>
+          <h1>{isOwner ? 'All Orders' : 'My Orders'}</h1>
+          <p className="text-muted mt-2">
+            {isOwner
+              ? 'Every client order. Reports awaiting review are marked REVIEW.'
+              : 'Your location intelligence analyses.'}
+          </p>
         </div>
-        <Button onClick={() => navigate('/new-order')}>+ New Analysis</Button>
+        {!isOwner && <Button onClick={() => navigate('/new-order')}>+ New Analysis</Button>}
       </div>
 
       {loading ? (
@@ -68,9 +72,11 @@ export const Home: React.FC = () => {
           </p>
         </Card>
       ) : projects.length === 0 ? (
-        <Card title="No projects yet">
+        <Card title={isOwner ? 'No client orders yet' : 'No projects yet'}>
           <p className="text-muted">
-            Start your first location analysis with “+ New Analysis”.
+            {isOwner
+              ? 'Orders placed by clients will appear here for review.'
+              : 'Start your first location analysis with “+ New Analysis”.'}
           </p>
         </Card>
       ) : (

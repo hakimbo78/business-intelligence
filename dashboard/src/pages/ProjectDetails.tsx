@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getToken } from '../auth/AuthContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 
@@ -59,7 +60,9 @@ export const ProjectDetails: React.FC = () => {
 
   const fetchReport = useCallback(async () => {
     try {
-      const res = await fetch(`/api/projects/${id}/report`);
+      const res = await fetch(`/api/projects/${id}/report`, {
+        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+      });
       if (res.ok) {
         setReport(await res.json());
       } else {
@@ -87,7 +90,7 @@ export const ProjectDetails: React.FC = () => {
     try {
       const res = await fetch(`/api/projects/${id}/${action}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
         body: body ? JSON.stringify(body) : undefined,
       });
       if (!res.ok) {

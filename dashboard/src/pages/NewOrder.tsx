@@ -3,6 +3,7 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { useNavigate } from 'react-router-dom';
+import { getToken } from '../auth/AuthContext';
 
 /**
  * Shown next to the investment field. Mirrors INITIAL_INVESTMENT_DEFINITION_ID
@@ -54,7 +55,7 @@ export const NewOrder: React.FC = () => {
 
       const intakeRes = await fetch('/api/projects/intake', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
         body: JSON.stringify({ clientId: 'mock-client-id', brief, projectType })
       });
 
@@ -67,7 +68,7 @@ export const NewOrder: React.FC = () => {
       if (modelType === 'validation') {
         const premisesRes = await fetch(`/api/projects/${project.id}/premises`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
           body: JSON.stringify({
             source: 'CUSTOMER_SUBMITTED',
             address: formData.address,
@@ -89,7 +90,7 @@ export const NewOrder: React.FC = () => {
       // payback calculation, so they must arrive exactly as entered.
       const inputsRes = await fetch(`/api/projects/${project.id}/financial-inputs`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
         body: JSON.stringify({
           estimatedInitialInvestment: Number(formData.estimatedInitialInvestment),
           currentAverageTransaction: Number(formData.averageTransaction),
@@ -112,7 +113,8 @@ export const NewOrder: React.FC = () => {
 
       // 4. Queue the job.
       const jobRes = await fetch(`/api/projects/${project.id}/generate-full-report`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
       });
 
       if (!jobRes.ok) throw new Error('Failed to queue job');
