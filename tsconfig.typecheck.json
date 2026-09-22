@@ -1,0 +1,19 @@
+{
+  // Type-checking only. The build (tsconfig.json) still compiles src/ alone —
+  // tests and dev scripts must never be emitted into dist/, but they should
+  // still be type-checked, which they previously were not.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "declaration": false,
+    "declarationMap": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*", "tests/**/*", "scripts/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

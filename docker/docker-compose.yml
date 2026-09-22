@@ -1,0 +1,24 @@
+# Docker Compose for AI Location Business Intelligence
+# Local development environment: PostgreSQL + PostGIS
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: location-intel-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: location_intelligence
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d location_intelligence"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

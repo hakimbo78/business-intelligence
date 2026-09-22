@@ -1,0 +1,298 @@
+// Prisma Schema for AI Location Business Intelligence
+// Phase 1: Domain Model entities (Client, Project, BusinessProfile, etc.)
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+/// System metadata table for health checks and database verification.
+model SystemInfo {
+  id        String   @id @default("system")
+  version   String   @default("0.1.0")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_info")
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  company   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  projects  Project[]
+
+  @@map("clients")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  clientId    String   @map("client_id")
+  name        String
+  /// Which of the three products this order is (see lib/project-types.ts):
+  /// VALIDATION      — client has one specific premises; we assess it.
+  /// COMPARISON      — client has several premises; we rank them.
+  /// AREA_SCOUTING   — client has only an area; we recommend micro-areas.
+  /// The three need different pipelines, so this drives the orchestrator.
+  projectType String   @default("AREA_SCOUTING") @map("project_type")
+  status      String   @default("DRAFT") // DRAFT, INTAKE, RESEARCH, ANALYSIS, REVIEW, DELIVERED
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  researchPlan Json?   @map("research_plan")
+  competitionAnalysis Json? @map("competition_analysis")
+  demandAnalysis Json? @map("demand_analysis")
+  marketGapAnalysis Json? @map("market_gap_analysis")
+  accessibilityAnalysis Json? @map("accessibility_analysis")
+  financialAnalysis Json? @map("financial_analysis")
+  scoringAnalysis Json? @map("scoring_analysis")
+
+  businessProfile BusinessProfile?
+  locationSearch  LocationSearch?
+  candidates      LocationCandidate[]
+  competitors     Competitor[]
+  reports         Report[]
+  dataSources     DataSource[]
+  propertyListings PropertyListing[]
+
+  @@map("projects")
+}
+
+model BusinessProfile {
+  id                          String   @id @default(uuid())
+  projectId                   String   @unique @map("project_id")
+  businessName                String   @map("business_name")
+  businessCategory            String   @map("business_category")
+  businessSubcategory         String?  @map("business_subcategory")
+  currentBranchCount          Int      @default(0) @map("current_branch_count")
+  currentAverageTransaction   Float?   @map("current_average_transaction")
+  estimatedDailyCustomers     Int?     @map("estimated_daily_customers")
+  operatingDays               Int?     @map("operating_days")
+  grossMargin                 Float?   @map("gross_margin")
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  project                     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("business_profiles")
+}
+
+model LocationSearch {
+  id                        String   @id @default(uuid())
+  projectId                 String   @unique @map("project_id")
+  targetCity                String   @map("target_city")
+  targetArea                String?  @map("target_area")
+  preferredRadius           Int?     @map("preferred_radius") // in meters
+  /// The size the customer is aiming for, used for rent/sqm modelling.
+  targetPropertySize        Int?     @map("target_property_size") // in sqm
+  /// Hard floor for candidate filtering (PROJECT_MASTER_SPEC.md §4).
+  /// Distinct from targetPropertySize: a target is an aim, not a rejection threshold.
+  minimumPropertySize       Int?     @map("minimum_property_size") // in sqm
+  /// Hard ceiling for candidate filtering (PROJECT_MASTER_SPEC.md §4).
+  maximumPropertySize       Int?     @map("maximum_property_size") // in sqm
+  maximumMonthlyRent        Float?   @map("maximum_monthly_rent")
+  /// Budget ceiling used to filter candidates out (PROJECT_MASTER_SPEC.md §4).
+  maximumInitialInvestment  Float?   @map("maximum_initial_investment")
+  /// Total Initial Investment the customer actually plans to spend before
+  /// opening: deposit, renovation, equipment, furniture, signage, permits and
+  /// opening stock (PROJECT_MASTER_SPEC.md §12). Excludes rent, which is an
+  /// operating cost. This is the payback-period numerator, so it is required
+  /// before financial analysis can run.
+  estimatedInitialInvestment Float?  @map("estimated_initial_investment")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  project                   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("location_searches")
+}
+
+model LocationCandidate {
+  id              String   @id @default(uuid())
+  projectId       String   @map("project_id")
+  placeId         String?  @map("place_id") // External provider ID (e.g. Google Maps Place ID)
+  name            String
+  address         String
+  latitude        Float
+  longitude       Float
+  geom            Unsupported("geometry(Point, 4326)")?
+  
+  /// Supplied by the client for VALIDATION and COMPARISON projects.
+  /// Never inferred from surrounding prices — absent data stays null.
+  estimatedRent   Float?   @map("estimated_rent")
+  propertySize    Int?     @map("property_size")
+  propertyType    String?  @map("property_type")
+  /// Which listing supplied the figures above, so any number can be traced back.
+  propertyListingId String? @map("property_listing_id")
+  /// Initial Location Investment (PROJECT_MASTER_SPEC.md §12): deposit plus
+  /// renovation, derived from explicit cost assumptions. Null when the candidate
+  /// lacks the rent/size data needed to estimate it.
+  estimatedLocationInvestment Float? @map("estimated_location_investment")
+
+  status          String   @default("IDENTIFIED") // IDENTIFIED, SHORTLISTED, REJECTED, RECOMMENDED
+  confidence      String   @default("LOW") // HIGH, MEDIUM, LOW
+  compositeScore  Float?   @map("composite_score")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  financialScenarios FinancialScenario[]
+  propertyListing PropertyListing? @relation(fields: [propertyListingId], references: [id], onDelete: SetNull)
+
+  @@map("location_candidates")
+}
+
+model Competitor {
+  id              String   @id @default(uuid())
+  projectId       String   @map("project_id")
+  placeId         String?  @map("place_id")
+  name            String
+  category        String
+  type            String   @default("DIRECT") // DIRECT, INDIRECT, SUBSTITUTE
+  latitude        Float
+  longitude       Float
+  geom            Unsupported("geometry(Point, 4326)")?
+  distanceMeters  Int?     @map("distance_meters")
+  rating          Float?
+  reviewCount     Int?     @map("review_count")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("competitors")
+}
+
+model FinancialScenario {
+  id                  String   @id @default(uuid())
+  candidateId         String   @map("candidate_id")
+  type                String   // CONSERVATIVE, BASE, UPSIDE
+  monthlyRevenue      Float    @map("monthly_revenue")
+  monthlyOperatingCost Float   @map("monthly_operating_cost")
+  grossProfit         Float    @map("gross_profit")
+  netProfit           Float    @map("net_profit")
+  paybackPeriodMonths Float?   @map("payback_period_months")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  candidate           LocationCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("financial_scenarios")
+}
+
+model Report {
+  id              String   @id @default(uuid())
+  projectId       String   @map("project_id")
+  version         String   @default("1.0")
+  status          String   @default("DRAFT") // DRAFT, REVIEW, APPROVED, DELIVERED
+  contentJson     Json?    @map("content_json") // Stored structured report data
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+/// Provenance record for every external data retrieval
+/// (DEVELOPMENT_RULES.md §10, PROJECT_MASTER_SPEC.md §25).
+model DataSource {
+  id              String   @id @default(uuid())
+  /// Which project the retrieval was made for. Null for global/background pulls.
+  projectId       String?  @map("project_id")
+  source          String   // e.g. "Google Maps", "BPS"
+  dataType        String   @map("data_type") // e.g. "demographics", "place_details"
+  geographicScope String?  @map("geographic_scope")
+  confidence      String   @default("LOW") // HIGH, MEDIUM, LOW
+  retrievedAt     DateTime @default(now()) @map("retrieved_at")
+  metadata        Json?    // Optional extra info
+
+  project         Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("data_sources")
+}
+
+/// An observed property offer, used as an AREA RENT BENCHMARK.
+///
+/// Clients supply the premises they want assessed (VALIDATION, COMPARISON), so
+/// every order deposits real rents for a real area here. Those accumulated
+/// observations are what let AREA_SCOUTING quote a concrete rent range per
+/// micro-area instead of a generic verdict — the product moat in §30.
+///
+/// Sources are limited to those PROJECT_MASTER_SPEC.md §7 allows: licensed
+/// providers, agents, owner submissions, customer-provided data and field
+/// surveys. Marketplace scraping is NOT a permitted source.
+model PropertyListing {
+  id              String   @id @default(uuid())
+  /// Set when the listing was contributed for one project; null for listings
+  /// contributed to the shared dataset.
+  projectId       String?  @map("project_id")
+
+  /// How the listing entered the system. Never "SCRAPED".
+  source          String   // CUSTOMER_SUBMITTED, AGENT_SUBMITTED, OWNER_SUBMITTED, FIELD_SURVEY, LICENSED_PROVIDER, MOCK
+  /// Provider listing id, agent name, or survey reference.
+  sourceReference String?  @map("source_reference")
+
+  placeId         String?  @map("place_id")
+  address         String
+  latitude        Float
+  longitude       Float
+  geom            Unsupported("geometry(Point, 4326)")?
+
+  propertyType    String?  @map("property_type") // Ruko, Kios, Shophouse, Warehouse, ...
+  sizeSqm         Int?     @map("size_sqm")
+  /// Normalised to a MONTHLY figure. Indonesian leases are often quoted
+  /// annually, so `annualRent` is kept alongside and divided when only it is known.
+  monthlyRent     Float?   @map("monthly_rent")
+  annualRent      Float?   @map("annual_rent")
+  /// True when monthlyRent was derived from annualRent rather than quoted directly.
+  rentIsDerived   Boolean  @default(false) @map("rent_is_derived")
+  deposit         Float?
+
+  availability    String   @default("UNKNOWN") // AVAILABLE, RESERVED, TAKEN, UNKNOWN
+  confidence      String   @default("LOW")     // HIGH, MEDIUM, LOW
+
+  retrievedAt     DateTime  @default(now()) @map("retrieved_at")
+  /// Set once someone has physically confirmed the listing (§17 field validation).
+  verifiedAt      DateTime? @map("verified_at")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  project         Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  candidates      LocationCandidate[]
+
+  @@index([projectId])
+  @@index([availability])
+  @@map("property_listings")
+}
+
+model JobQueue {
+  id          String   @id @default(uuid())
+  type        String   // e.g., "GENERATE_REPORT"
+  status      String   @default("PENDING") // PENDING, PROCESSING, RETRYING, COMPLETED, FAILED
+  payload     Json     // Project ID, Client ID, etc.
+  error       String?  // Store error stack trace if failed
+  /// Completed run attempts, incremented on every failure.
+  attempts    Int      @default(0)
+  /// Attempts allowed before the job is marked FAILED for good.
+  maxAttempts Int      @default(3) @map("max_attempts")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@map("job_queue")
+}

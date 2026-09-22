@@ -1,0 +1,183 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import puppeteer from 'puppeteer';
+import { REPORT_DISCLAIMER_EN, REPORT_DISCLAIMER_ID } from '../lib/disclaimer.js';
+
+/**
+ * Render a stored Location Intelligence Report to PDF.
+ *
+ * Usage: tsx src/scripts/generate-pdf.ts [input.json] [output.pdf]
+ *
+ * Section headings are bilingual because they are fixed labels. Report CONTENT
+ * is rendered exactly once, from the report itself — never duplicated into a
+ * hand-written Indonesian column, which would present fabricated findings to
+ * the customer (DEVELOPMENT_RULES.md §9).
+ */
+
+/** Escape untrusted text before interpolating it into HTML. */
+function esc(value: unknown): string {
+  if (value === null || value === undefined) return 'DATA NOT AVAILABLE';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function money(value: unknown): string {
+  return typeof value === 'number' ? value.toLocaleString('id-ID') : 'DATA NOT AVAILABLE';
+}
+
+function list(items: unknown): string {
+  if (!Array.isArray(items) || items.length === 0) {
+    return '<li><em>DATA NOT AVAILABLE</em></li>';
+  }
+  return items.map((i) => `<li>${esc(i)}</li>`).join('');
+}
+
+async function generateReportPDF() {
+  const jsonPath = path.resolve(process.argv[2] ?? 'latest-report.json');
+  const pdfPath = path.resolve(process.argv[3] ?? 'latest-report.pdf');
+
+  if (!fs.existsSync(jsonPath)) {
+    console.error('Report JSON not found at:', jsonPath);
+    process.exitCode = 1;
+    return;
+  }
+
+  const report = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+  const meta = report.projectMeta ?? {};
+  const synthesis = report.synthesis ?? {};
+  const analysis = report.analysis ?? {};
+  const scenarios: any[] = analysis.financial?.scenarios ?? [];
+
+  const scenarioRows = scenarios.length
+    ? scenarios
+        .map(
+          (s: any) => `
+            <tr>
+              <td><strong>${esc(s.scenarioName)}</strong></td>
+              <td>${esc(s.effectiveCustomersPerDay)}</td>
+              <td>${money(s.monthlyRevenue)}</td>
+              <td>${money(s.operatingProfit)}</td>
+              <td>${s.paybackPeriodMonths === -1 ? 'Not viable' : esc(s.paybackPeriodMonths)}</td>
+            </tr>`
+        )
+        .join('')
+    : '<tr><td colspan="5"><em>DATA NOT AVAILABLE</em></td></tr>';
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Location Intelligence Report</title>
+      <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; padding: 40px; margin: 0; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 30px; font-size: 28px; }
+        h2 { color: #2980b9; margin-top: 40px; font-size: 22px; }
+        .sub { font-size: 16px; color: #7f8c8d; font-weight: normal; }
+        .panel { padding: 15px; background: #f9f9f9; border-radius: 8px; border-left: 4px solid #3498db; margin-bottom: 15px; }
+        .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: #ecf0f1; padding: 20px; border-radius: 8px; margin-bottom: 40px; }
+        .meta div strong { display: block; color: #2c3e50; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .score-box { display: inline-block; padding: 10px 20px; background: #27ae60; color: white; font-size: 24px; font-weight: bold; border-radius: 8px; text-align: center; }
+        .disclaimer { margin-top: 50px; padding: 20px; border: 1px solid #e74c3c; border-radius: 8px; background: #fdf3f2; font-size: 12px; }
+        .disclaimer p { margin: 0 0 10px 0; }
+      </style>
+    </head>
+    <body>
+      <h1>Location Intelligence Report <br><span class="sub">Laporan Intelijen Lokasi</span></h1>
+
+      <div class="meta">
+        <div><strong>Project / Proyek:</strong> ${esc(meta.projectName)}</div>
+        <div><strong>Business / Bisnis:</strong> ${esc(meta.businessName)}</div>
+        <div><strong>Target Area / Area Target:</strong> ${esc(meta.targetArea)}</div>
+        <div>
+          <strong>Overall Score / Skor Keseluruhan:</strong>
+          <div class="score-box">${esc(analysis.scoring?.overallScore)} / 100</div>
+        </div>
+        <div><strong>Generated / Dibuat:</strong> ${esc(meta.generatedAt)}</div>
+      </div>
+
+      <h2>1. Executive Summary <br><span class="sub">Ringkasan Eksekutif</span></h2>
+      <div class="panel">${esc(synthesis.executiveSummary)}</div>
+
+      <h2>2. Methodology <br><span class="sub">Metodologi</span></h2>
+      <div class="panel">${esc(synthesis.methodology)}</div>
+
+      <h2>3. Demand &amp; Competition <br><span class="sub">Permintaan &amp; Persaingan</span></h2>
+      <div class="panel">
+        <strong>Demand Signal / Sinyal Permintaan:</strong> ${esc(analysis.demand?.demandSignal)}<br>
+        <strong>Confidence / Tingkat Keyakinan:</strong> ${esc(analysis.demand?.confidence)}<br>
+        <strong>Competition Density / Kepadatan Kompetisi:</strong> ${esc(analysis.competition?.densityLevel)}
+        <p>${esc(analysis.demand?.customerFit)}</p>
+        <p>${esc(analysis.competition?.summary)}</p>
+      </div>
+
+      <h2>4. Candidate Locations <br><span class="sub">Kandidat Lokasi</span></h2>
+      <div class="panel">
+        <strong>Identified / Teridentifikasi:</strong> ${esc(report.candidates?.totalIdentified)} &nbsp;|&nbsp;
+        <strong>Shortlisted / Masuk Daftar Pendek:</strong> ${esc(report.candidates?.shortlistedCount)}
+      </div>
+
+      <h2>5. Financial Scenarios <br><span class="sub">Skenario Finansial</span></h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Scenario / Skenario</th>
+            <th>Daily Customers / Pelanggan Harian</th>
+            <th>Monthly Revenue / Pendapatan Bulanan (Rp)</th>
+            <th>Operating Profit / Laba Operasional (Rp)</th>
+            <th>Payback (months) / Balik Modal (bulan)</th>
+          </tr>
+        </thead>
+        <tbody>${scenarioRows}</tbody>
+      </table>
+
+      <h2>6. Key Assumptions <br><span class="sub">Asumsi Utama</span></h2>
+      <ul>${list(synthesis.assumptions)}</ul>
+
+      <h2>7. Market Gap Hypotheses <br><span class="sub">Hipotesis Celah Pasar</span></h2>
+      <div class="panel">
+        <strong>Overall Recommendation / Rekomendasi Keseluruhan:</strong>
+        ${esc(analysis.marketGap?.overallRecommendation)}
+        <p>${esc(analysis.marketGap?.summary)}</p>
+      </div>
+
+      <h2>8. Field Validation Checklist <br><span class="sub">Daftar Periksa Validasi Lapangan</span></h2>
+      <ul>${list(synthesis.validationChecklist)}</ul>
+
+      <div class="disclaimer">
+        <p><strong>Disclaimer</strong><br>${esc(report.disclaimer ?? REPORT_DISCLAIMER_EN)}</p>
+        <p><strong>Penafian</strong><br>${esc(REPORT_DISCLAIMER_ID)}</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  console.log('Launching Puppeteer...');
+  const browser = await puppeteer.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'load' });
+
+    await page.pdf({
+      path: pdfPath,
+      format: 'A4',
+      margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+      printBackground: true,
+    });
+  } finally {
+    await browser.close();
+  }
+
+  console.log('PDF generated successfully at:', pdfPath);
+}
+
+generateReportPDF().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});
