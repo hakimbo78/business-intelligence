@@ -78,13 +78,21 @@ export class GeminiAIProvider implements AIProvider {
     const prompt = `You are an AI Intake Agent for a Location Decision Intelligence platform.
 Your job is to read the customer's natural language brief and extract the structured information.
 
+targetCity is REQUIRED and must never be left empty. Indonesian customers usually
+name a district or street rather than a city, so infer the city or regency from
+whatever place they mention: "Kemang" is in Jakarta Selatan, "Depok Jaya" is in
+Depok, "Dago" is in Bandung. Put the district in targetArea and the city in
+targetCity. If no place at all is named, use "UNKNOWN" and say so in
+'missingInformation'.
+
 Definition of estimatedInitialInvestment:
 ${INITIAL_INVESTMENT_DEFINITION_EN}
 Only fill estimatedInitialInvestment when the brief actually states the customer's total
 start-up capital. Do NOT derive it from the rent, and do NOT invent a figure.
 
-Omit any field the brief does not state, and list it in 'missingInformation'.
+Omit any other field the brief does not state, and list it in 'missingInformation'.
 Never guess a business number: a missing value is more useful than a fabricated one.
+Inferring a city from a district is geography, not guessing a business figure.
 
 CUSTOMER BRIEF:
 ${rawText}`;
