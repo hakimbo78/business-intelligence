@@ -60,6 +60,13 @@ export class CompetitionAgent {
     const competitorSummary = allCompetitors.map(c => ({ name: c.name, category: c.category }));
 
     const prompt = `You are a Competition Analyst Agent.
+
+COUNTING RULE — the list below is ALL you may count.
+It contains exactly ${competitorSummary.length} businesses. directCompetitorsCount plus
+indirectCompetitorsCount must add up to ${competitorSummary.length}, and neither may
+exceed it. Do not estimate a wider market: the map source caps results, so this list
+is the nearest businesses, not every business in the area. Say that in the summary
+rather than inventing a total.
 Write every free-text field in Indonesian (Bahasa Indonesia); the reader is an Indonesian business owner. Enum values stay in English.
 Analyze the following business profile and the discovered competitors in its target area.
 Classify the density of the market (LOW, MEDIUM, HIGH) and identify direct vs indirect competitors.

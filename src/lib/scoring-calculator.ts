@@ -84,10 +84,21 @@ function scoreAccessibility(accessibility: any): DimensionScore {
   return { dimension: 'accessibility', score, evidence: `Accessibility score is ${score}/100.` };
 }
 
+/**
+ * The best score a location may earn while operating costs are unknown.
+ *
+ * Without them, operating profit is gross profit less rent only, so the payback
+ * period is optimistic — often by a wide margin. Scoring that 90/100 would have
+ * the score contradict the warning printed in the same report.
+ */
+const UNKNOWN_OPERATING_COST_CAP = 55;
+
 function scoreFinancialFit(financial: any): DimensionScore {
   if (!financial?.scenarios) return { dimension: 'financial_fit', score: 0, evidence: 'No financial data.' };
   const base = financial.scenarios.find((s: any) => s.scenarioName === 'BASE');
   if (!base) return { dimension: 'financial_fit', score: 0, evidence: 'BASE scenario not found.' };
+
+  const operatingCostKnown = (financial.inputs?.operatingCostMonthly ?? 0) > 0;
 
   let score: number;
   if (!base.isViable) {
@@ -101,7 +112,22 @@ function scoreFinancialFit(financial: any): DimensionScore {
   } else {
     score = 35;
   }
-  return { dimension: 'financial_fit', score, evidence: `BASE payback is ${base.paybackPeriodMonths} months. Viable: ${base.isViable}.` };
+  if (!operatingCostKnown && score > UNKNOWN_OPERATING_COST_CAP) {
+    return {
+      dimension: 'financial_fit',
+      score: UNKNOWN_OPERATING_COST_CAP,
+      evidence:
+        `Balik modal BASE ${base.paybackPeriodMonths} bulan, TETAPI biaya operasional ` +
+        '(gaji, listrik, bahan) belum dikurangkan. Skor dibatasi karena kelayakan ' +
+        'sebenarnya belum dapat dinilai.',
+    };
+  }
+
+  return {
+    dimension: 'financial_fit',
+    score,
+    evidence: `Balik modal BASE ${base.paybackPeriodMonths} bulan. Layak: ${base.isViable}.`,
+  };
 }
 
 function scoreGrowth(demand: any, gap: any): DimensionScore {

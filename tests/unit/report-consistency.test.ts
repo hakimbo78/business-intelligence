@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   checkReportConsistency,
   assertsViability,
+  assertsLoss,
   statedPaybackMonths,
 } from '@/lib/report-consistency.js';
 import { REPORT_DISCLAIMER_EN } from '@/lib/disclaimer.js';
@@ -170,5 +171,49 @@ describe('Report consistency', () => {
     });
 
     expect(issues).toEqual([]);
+  });
+});
+
+describe('Loss claims against the numbers', () => {
+  it('should spot a claim that the business loses money', () => {
+    expect(assertsLoss('berpotensi mengalami kerugian')).toBe(true);
+    expect(assertsLoss('The location is not viable')).toBe(true);
+    expect(assertsLoss('usaha ini akan merugi')).toBe(true);
+  });
+
+  it('should not read a denial of loss as a loss claim', () => {
+    expect(assertsLoss('tidak rugi pada skenario mana pun')).toBe(false);
+    expect(assertsLoss('Demand is strong.')).toBe(false);
+  });
+
+  it('should catch a loss claim when every scenario is profitable', () => {
+    // A summary opening "berpotensi mengalami kerugian" above a table showing
+    // Rp 63,500,000 monthly profit is as contradictory as the reverse, and was
+    // slipping through because the check only looked one way.
+    const issues = codes({
+      ...soundReport,
+      synthesis: {
+        executiveSummary:
+          'Analisis menunjukkan bisnis ini berpotensi mengalami kerugian karena permintaan lemah.',
+        assumptions: [],
+      },
+    });
+
+    expect(issues).toContain('LOSS_CONTRADICTION');
+  });
+
+  it('should allow a loss claim when the scenarios agree', () => {
+    const issues = codes({
+      ...soundReport,
+      synthesis: { executiveSummary: 'Bisnis ini berpotensi merugi.', assumptions: [] },
+      analysis: {
+        financial: {
+          inputs: { averageTransaction: 35000 },
+          scenarios: [{ scenarioName: 'BASE', isViable: false, paybackPeriodMonths: -1 }],
+        },
+      },
+    });
+
+    expect(issues).not.toContain('LOSS_CONTRADICTION');
   });
 });

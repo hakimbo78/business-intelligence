@@ -70,11 +70,28 @@ describe('Scoring Calculator', () => {
     expect(acc?.score).toBe(85);
   });
 
-  it('should score financial_fit based on payback period', () => {
-    const result = calculateScores(fullInputs);
+  it('should score financial_fit from the payback period once costs are known', () => {
+    const result = calculateScores({
+      ...fullInputs,
+      financialAnalysis: {
+        ...fullInputs.financialAnalysis,
+        inputs: { operatingCostMonthly: 20_000_000 },
+      },
+    });
     const fin = result.dimensions.find(d => d.dimension === 'financial_fit');
     // BASE payback is 8.3 months (<=12) → score 75
     expect(fin?.score).toBe(75);
+  });
+
+  it('should cap financial_fit while operating costs are unknown', () => {
+    // Operating profit is gross profit less rent only, so the payback is
+    // optimistic. Scoring it 75 would contradict the warning printed in the
+    // same report.
+    const result = calculateScores(fullInputs);
+    const fin = result.dimensions.find(d => d.dimension === 'financial_fit');
+
+    expect(fin?.score).toBe(55);
+    expect(fin?.evidence).toContain('belum dikurangkan');
   });
 
   it('should handle missing data gracefully', () => {

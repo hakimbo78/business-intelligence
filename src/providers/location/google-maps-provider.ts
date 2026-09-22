@@ -173,6 +173,11 @@ export class GoogleMapsProvider implements LocationProvider {
         body: JSON.stringify({
           textQuery: params.query,
           maxResultCount: Math.min(params.maxResults ?? 20, 20),
+          // Without these the call is a free-text name match, so a street named
+          // "Jalan Sekolah" comes back as the nearest school.
+          ...(params.type
+            ? { includedType: params.type, strictTypeFiltering: true }
+            : {}),
           locationBias: {
             circle: {
               center: {

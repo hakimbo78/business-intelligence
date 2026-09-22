@@ -51,6 +51,9 @@ const FORBIDDEN_PHRASES = [
   'certain to succeed',
 ];
 
+/** Words asserting the venture loses money, in either language. */
+const LOSS_WORDS = /(kerugian|merugi|tidak layak|rugi|not viable|unprofitable|loss-making)/gi;
+
 /** Words asserting the venture works, in either language. */
 const VIABILITY_WORDS = /(viable|profitable|menguntungkan|balik modal|layak secara finansial)/gi;
 
@@ -63,6 +66,23 @@ const NEGATION_BEFORE = /\b(not|non|never|no|tidak|belum|bukan|tanpa)\s+(\w+\s+)
  * Checks for a negation immediately before the word, so "not viable" is not
  * mistaken for a claim of viability.
  */
+/**
+ * Does this text assert the business loses money?
+ *
+ * The mirror of assertsViability. A summary opening "berpotensi mengalami
+ * kerugian" above a table showing Rp 63,500,000 monthly profit is just as
+ * contradictory as the reverse, and was not being caught.
+ */
+export function assertsLoss(text: string): boolean {
+  if (!text) return false;
+
+  for (const match of text.matchAll(LOSS_WORDS)) {
+    const preceding = text.slice(Math.max(0, match.index - 30), match.index);
+    if (!NEGATION_BEFORE.test(preceding)) return true;
+  }
+  return false;
+}
+
 export function assertsViability(text: string): boolean {
   if (!text) return false;
 
@@ -121,6 +141,17 @@ export function checkReportConsistency(
         message:
           'The executive summary claims the location is viable or profitable, but no financial ' +
           'scenario is viable — every scenario shows a negative operating profit.',
+      });
+    }
+
+    const allViable = scenarios.every((s) => s.isViable === true);
+    if (allViable && assertsLoss(summary)) {
+      issues.push({
+        code: 'LOSS_CONTRADICTION',
+        message:
+          'The executive summary says the business loses money, but every financial scenario ' +
+          'is viable. If the concern is that the customer estimates behind those scenarios are ' +
+          'optimistic, say that explicitly rather than contradicting the table.',
       });
     }
 
