@@ -108,3 +108,71 @@ export function describeLocationCostAssumptions(
   }
   return out;
 }
+
+export interface LocationCostSummary {
+  monthlyRent: number | null;
+  annualRent: number | null;
+  propertySizeSqm: number | null;
+  rentPerSqm: number | null;
+  /**
+   * Annual rent as a share of annual revenue (PROJECT_MASTER_SPEC.md §12).
+   *
+   * The clearest single measure of whether a location is affordable for the
+   * trade it can do. Retail rules of thumb put a healthy ratio in the low
+   * tens of percent; well above that, the rent eats the business.
+   */
+  occupancyCostRatio: number | null;
+  estimatedLocationInvestment: number | null;
+  /** What could not be computed, and why. */
+  missing: string[];
+}
+
+/**
+ * Summarise what a premises costs, from figures already established.
+ *
+ * Purely arithmetic on stored values — nothing here estimates. A figure that
+ * cannot be derived stays null and is named in `missing`, so the report says
+ * "not available" rather than showing a confident zero.
+ */
+export function summariseLocationCost(
+  premises: {
+    estimatedRent: number | null;
+    propertySize: number | null;
+    estimatedLocationInvestment?: number | null;
+  },
+  baseMonthlyRevenue: number | null
+): LocationCostSummary {
+  const missing: string[] = [];
+
+  const monthlyRent = premises.estimatedRent ?? null;
+  if (monthlyRent === null) missing.push('monthly rent');
+
+  const propertySizeSqm = premises.propertySize ?? null;
+  if (propertySizeSqm === null) missing.push('property size');
+
+  const annualRent = monthlyRent !== null ? monthlyRent * 12 : null;
+
+  const rentPerSqm =
+    monthlyRent !== null && propertySizeSqm !== null && propertySizeSqm > 0
+      ? Math.round(monthlyRent / propertySizeSqm)
+      : null;
+  if (rentPerSqm === null && !missing.includes('property size')) {
+    missing.push('rent per sqm');
+  }
+
+  const occupancyCostRatio =
+    annualRent !== null && baseMonthlyRevenue !== null && baseMonthlyRevenue > 0
+      ? Math.round((annualRent / (baseMonthlyRevenue * 12)) * 1000) / 10
+      : null;
+  if (occupancyCostRatio === null) missing.push('occupancy cost ratio');
+
+  return {
+    monthlyRent,
+    annualRent,
+    propertySizeSqm,
+    rentPerSqm,
+    occupancyCostRatio,
+    estimatedLocationInvestment: premises.estimatedLocationInvestment ?? null,
+    missing,
+  };
+}

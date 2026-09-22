@@ -4,6 +4,7 @@ import { createAIProvider } from '../providers/ai/index.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../config/database.js';
 import { REPORT_DISCLAIMER_EN } from '../lib/disclaimer.js';
+import { checkReportConsistency } from '../lib/report-consistency.js';
 
 export const qaReviewSchema = z.object({
   isApproved: z.boolean().describe('True if the report is logically sound, fully traceable, and free of hallucinations.'),
@@ -45,23 +46,30 @@ If you find contradictory numbers, unsupported claims, or missing critical secti
       'QAReview'
     );
 
-    // 3. Deterministic gate: the §28 disclaimer is mandatory and is checked in
-    // code, never delegated to the model (AGENT_ORCHESTRATION_SPEC.md §15).
-    const content = report.contentJson as unknown as { disclaimer?: string };
-    const disclaimerPresent = content?.disclaimer === REPORT_DISCLAIMER_EN;
+    // 3. Deterministic gate.
+    //
+    // Whatever the model concludes, a report that contradicts its own numbers
+    // must not pass. A generated report once claimed "a viable payback period
+    // of 8 months" one page before a table showing every scenario losing
+    // money; code catches that every time, judgement might not.
+    const content = report.contentJson as unknown as Parameters<typeof checkReportConsistency>[0];
+    const consistencyIssues = checkReportConsistency(content, REPORT_DISCLAIMER_EN);
 
-    const issues = [...aiReview.issues];
-    if (!disclaimerPresent) {
-      issues.push(
-        'Mandatory legal disclaimer (PROJECT_MASTER_SPEC.md §28) is missing or has been altered.'
-      );
-    }
+    const issues = [...aiReview.issues, ...consistencyIssues.map((i) => `[${i.code}] ${i.message}`)];
 
     const review: QAReview = {
       ...aiReview,
-      isApproved: aiReview.isApproved && disclaimerPresent,
+      // A deterministic failure is binding: the model cannot approve past it.
+      isApproved: aiReview.isApproved && consistencyIssues.length === 0,
       issues,
     };
+
+    if (consistencyIssues.length > 0) {
+      logger.warn(
+        { projectId, codes: consistencyIssues.map((i) => i.code) },
+        'Report failed deterministic consistency checks'
+      );
+    }
 
     // 4. Update statuses.
     //

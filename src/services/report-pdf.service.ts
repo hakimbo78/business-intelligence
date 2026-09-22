@@ -24,6 +24,53 @@ function list(items: unknown): string {
   return items.map((i) => `<li>${esc(i)}</li>`).join('');
 }
 
+
+/**
+ * The property under assessment.
+ *
+ * A validation report exists to judge one premises, so its cost figures belong
+ * near the front. Anything that could not be derived says so rather than
+ * showing a confident zero.
+ */
+function premisesSection(report: StructuredReport): string {
+  const premises = report.premises;
+  if (!premises) return '';
+
+  const cost = premises.cost;
+  const row = (label: string, value: string) =>
+    `<tr><th style="width:45%">${label}</th><td>${value}</td></tr>`;
+
+  const rupiah = (v: number | null) =>
+    v === null ? '<em>DATA NOT AVAILABLE</em>' : `Rp ${v.toLocaleString('id-ID')}`;
+
+  const occupancy =
+    cost.occupancyCostRatio === null
+      ? '<em>DATA NOT AVAILABLE</em>'
+      : `${cost.occupancyCostRatio}% of annual revenue`;
+
+  return `
+      <h2>4. The Premises Assessed <br><span class="sub">Properti yang Dinilai</span></h2>
+      <div class="panel">
+        <strong>${esc(premises.name)}</strong><br>
+        ${esc(premises.address)}
+        ${premises.propertyType ? `<br>Type / Tipe: ${esc(premises.propertyType)}` : ''}
+      </div>
+      <table>
+        ${row('Monthly rent / Sewa bulanan', rupiah(cost.monthlyRent))}
+        ${row('Annual rent / Sewa tahunan', rupiah(cost.annualRent))}
+        ${row('Size / Luas', cost.propertySizeSqm === null ? '<em>DATA NOT AVAILABLE</em>' : `${cost.propertySizeSqm} m²`)}
+        ${row('Rent per m² / Sewa per m²', rupiah(cost.rentPerSqm))}
+        ${row('Occupancy cost ratio / Rasio biaya okupansi', occupancy)}
+        ${row('Initial location investment / Investasi lokasi awal', rupiah(cost.estimatedLocationInvestment))}
+        ${row('Data confidence / Keyakinan data', esc(premises.confidence))}
+      </table>
+      ${
+        cost.missing.length > 0
+          ? `<p class="sub">Not available from the information supplied: ${esc(cost.missing.join(', '))}.</p>`
+          : ''
+      }`;
+}
+
 /**
  * Render a report as HTML.
  *
@@ -104,13 +151,15 @@ export function renderReportHtml(report: StructuredReport): string {
         <p>${esc(analysis.competition?.summary)}</p>
       </div>
 
-      <h2>4. Candidate Locations <br><span class="sub">Kandidat Lokasi</span></h2>
+      ${premisesSection(report)}
+
+      <h2>5. Candidate Locations <br><span class="sub">Kandidat Lokasi</span></h2>
       <div class="panel">
         <strong>Identified / Teridentifikasi:</strong> ${esc(report.candidates?.totalIdentified)} &nbsp;|&nbsp;
         <strong>Shortlisted / Masuk Daftar Pendek:</strong> ${esc(report.candidates?.shortlistedCount)}
       </div>
 
-      <h2>5. Financial Scenarios <br><span class="sub">Skenario Finansial</span></h2>
+      <h2>6. Financial Scenarios <br><span class="sub">Skenario Finansial</span></h2>
       <table>
         <thead>
           <tr>
@@ -124,17 +173,17 @@ export function renderReportHtml(report: StructuredReport): string {
         <tbody>${scenarioRows}</tbody>
       </table>
 
-      <h2>6. Key Assumptions <br><span class="sub">Asumsi Utama</span></h2>
+      <h2>7. Key Assumptions <br><span class="sub">Asumsi Utama</span></h2>
       <ul>${list(synthesis?.assumptions)}</ul>
 
-      <h2>7. Market Gap Hypotheses <br><span class="sub">Hipotesis Celah Pasar</span></h2>
+      <h2>8. Market Gap Hypotheses <br><span class="sub">Hipotesis Celah Pasar</span></h2>
       <div class="panel">
         <strong>Overall Recommendation / Rekomendasi Keseluruhan:</strong>
         ${esc(analysis.marketGap?.overallRecommendation)}
         <p>${esc(analysis.marketGap?.summary)}</p>
       </div>
 
-      <h2>8. Field Validation Checklist <br><span class="sub">Daftar Periksa Validasi Lapangan</span></h2>
+      <h2>9. Field Validation Checklist <br><span class="sub">Daftar Periksa Validasi Lapangan</span></h2>
       <ul>${list(synthesis?.validationChecklist)}</ul>
 
       <div class="disclaimer">

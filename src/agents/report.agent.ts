@@ -4,6 +4,7 @@ import { createAIProvider } from '../providers/ai/index.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../config/database.js';
 import { REPORT_DISCLAIMER_EN } from '../lib/disclaimer.js';
+import { summariseLocationCost, type LocationCostSummary } from '../lib/location-cost.js';
 
 export const reportSynthesisSchema = z.object({
   executiveSummary: z.string().describe('A strong, single-paragraph executive summary of the business intelligence analysis.'),
@@ -24,6 +25,19 @@ export interface StructuredReport {
   };
   /** Mandatory legal disclaimer (PROJECT_MASTER_SPEC.md §28). */
   disclaimer: string;
+  /**
+   * The premises under assessment, for VALIDATION orders.
+   *
+   * Without this the report never describes the property the client is paying
+   * to have judged. Null for AREA_SCOUTING, which recommends areas.
+   */
+  premises: {
+    name: string;
+    address: string;
+    propertyType: string | null;
+    confidence: string;
+    cost: LocationCostSummary;
+  } | null;
   synthesis: ReportSynthesis;
   candidates: {
     totalIdentified: number;
@@ -112,7 +126,26 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       'ReportSynthesis'
     );
 
-    // 3. Compile final structured report
+    // 3. Describe the premises being assessed.
+    //
+    // All of this is already established elsewhere; the report simply failed to
+    // carry it, so a validation report never mentioned the property at all.
+    const financial = project.financialAnalysis as { scenarios?: Array<{ scenarioName: string; monthlyRevenue: number }> } | null;
+    const baseRevenue =
+      financial?.scenarios?.find((s) => s.scenarioName === 'BASE')?.monthlyRevenue ?? null;
+
+    const assessed = project.candidates.length === 1 ? project.candidates[0] : null;
+    const premises = assessed
+      ? {
+          name: assessed.name,
+          address: assessed.address,
+          propertyType: assessed.propertyType,
+          confidence: assessed.confidence,
+          cost: summariseLocationCost(assessed, baseRevenue),
+        }
+      : null;
+
+    // 4. Compile final structured report
     const reportData: StructuredReport = {
       projectMeta: {
         projectId: project.id,
@@ -122,6 +155,7 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
         generatedAt: new Date().toISOString(),
       },
       disclaimer: REPORT_DISCLAIMER_EN,
+      premises,
       synthesis,
       candidates: {
         totalIdentified,
@@ -138,7 +172,7 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       }
     };
 
-    // 4. Save to DB
+    // 5. Save to DB
     await prisma.report.create({
       data: {
         projectId,
@@ -148,7 +182,7 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       }
     });
 
-    // 5. Update Project status
+    // 6. Update Project status
     await prisma.project.update({
       where: { id: projectId },
       data: { status: 'REVIEW' }
