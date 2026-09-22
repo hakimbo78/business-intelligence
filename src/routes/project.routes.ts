@@ -15,7 +15,9 @@ import { qaAgent } from '../agents/qa.agent.js';
 import { CreateProjectInput } from '../repositories/project.repository.js';
 import { jobService } from '../queue/job.service.js';
 import { premisesService, type AttachPremisesInput } from '../services/premises.service.js';
-import { requireAuth, requireProjectAccess } from '../middleware/auth.middleware.js';
+import { paymentService, PaymentError } from '../services/payment.service.js';
+import { priceList } from '../lib/pricing.js';
+import { requireAuth, requireProjectAccess, requireOwner } from '../middleware/auth.middleware.js';
 import { PropertyNormalizationError } from '../lib/property-normalizer.js';
 import { prisma } from '../config/database.js';
 import {
@@ -278,6 +280,85 @@ export async function projectRoutes(app: FastifyInstance) {
     }
   );
 
+  /** The price list, so the order form can quote before an order exists. */
+  app.get('/prices', async (_request, reply) => {
+    return reply.send(priceList());
+  });
+
+  /** Orders waiting for the owner to verify a transfer. */
+  app.get('/payments/pending', { onRequest: requireOwner }, async (_request, reply) => {
+    return reply.send(await paymentService.pendingVerification());
+  });
+
+  /** What the client must pay, and where to send it. */
+  app.get<{ Params: { id: string } }>('/:id/payment', async (request, reply) => {
+    try {
+      return reply.send(await paymentService.paymentInstructions(request.params.id));
+    } catch (error) {
+      return reply.status(404).send({ error: (error as Error).message });
+    }
+  });
+
+  /** The client states they have transferred the money. */
+  app.post<{ Params: { id: string }; Body: Record<string, string> }>(
+    '/:id/payment/confirm',
+    async (request, reply) => {
+      try {
+        const payment = await paymentService.confirmByClient(request.params.id, {
+          senderName: request.body?.senderName ?? '',
+          senderBank: request.body?.senderBank ?? '',
+          reference: request.body?.reference,
+          transferredAt: request.body?.transferredAt,
+        });
+        return reply.send(payment);
+      } catch (error) {
+        if (error instanceof PaymentError) {
+          return reply.status(400).send({ error: error.message });
+        }
+        throw error;
+      }
+    }
+  );
+
+  /** The owner found the transfer on their statement. */
+  app.post<{ Params: { id: string } }>(
+    '/:id/payment/approve',
+    { onRequest: requireOwner },
+    async (request, reply) => {
+      try {
+        return reply.send(
+          await paymentService.approve(request.params.id, request.user!.userId)
+        );
+      } catch (error) {
+        if (error instanceof PaymentError) {
+          return reply.status(400).send({ error: error.message });
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post<{ Params: { id: string }; Body: { reason?: string } }>(
+    '/:id/payment/reject',
+    { onRequest: requireOwner },
+    async (request, reply) => {
+      try {
+        return reply.send(
+          await paymentService.reject(
+            request.params.id,
+            request.body?.reason ?? '',
+            request.user!.userId
+          )
+        );
+      } catch (error) {
+        if (error instanceof PaymentError) {
+          return reply.status(400).send({ error: error.message });
+        }
+        throw error;
+      }
+    }
+  );
+
   app.post<{ Params: { id: string } }>('/:id/research-plan', async (request, reply) => {
     try {
       const plan = await researchPlannerAgent.generatePlan(request.params.id);
@@ -406,6 +487,16 @@ export async function projectRoutes(app: FastifyInstance) {
   // Phase 14: Job Queue endpoint
   app.post<{ Params: { id: string } }>('/:id/generate-full-report', async (request, reply) => {
     try {
+      // The pipeline spends real money on LLM and maps APIs. Nothing runs
+      // until the owner has verified the client's transfer.
+      if (!(await paymentService.isPaid(request.params.id))) {
+        const payment = await paymentService.getForProject(request.params.id);
+        return reply.status(402).send({
+          error: 'Payment has not been approved for this order',
+          paymentStatus: payment?.status ?? 'AWAITING_PAYMENT',
+        });
+      }
+
       const jobId = await jobService.enqueueJob('GENERATE_REPORT', { projectId: request.params.id });
       return reply.status(202).send({ message: 'Report generation queued', jobId });
     } catch (error) {

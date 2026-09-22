@@ -38,6 +38,16 @@ const envSchema = z.object({
   // CORS (required in production so the allow-list is never implicit)
   CORS_ALLOWED_ORIGINS: z.string().optional(),
 
+  // --- Pricing and payment (PROJECT_MASTER_SPEC.md §29: configurable) ---
+  PRICE_VALIDATION: z.string().optional(),
+  PRICE_COMPARISON: z.string().optional(),
+  PRICE_AREA_SCOUTING: z.string().optional(),
+  // Where clients send the transfer. Without these the dashboard tells the
+  // client payment is not set up, rather than showing an empty account number.
+  BANK_NAME: z.string().optional(),
+  BANK_ACCOUNT_NUMBER: z.string().optional(),
+  BANK_ACCOUNT_HOLDER: z.string().optional(),
+
   // --- Authentication ---
   // Google OAuth client id. The dashboard signs in with Google and sends the
   // resulting ID token; the API verifies it against this audience.

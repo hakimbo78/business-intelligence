@@ -47,20 +47,39 @@ export const NewOrder: React.FC = () => {
     try {
       const location = modelType === 'validation' ? formData.address : formData.targetArea;
 
-      // 1. Create client and project via Intake.
-      const brief = `Business Category: ${formData.businessCategory}. Target Location: ${location}`;
       // The order type decides the pipeline: validation assesses the premises
       // the client supplies, scouting searches for micro-areas itself.
       const projectType = modelType === 'validation' ? 'VALIDATION' : 'AREA_SCOUTING';
 
-      const intakeRes = await fetch('/api/projects/intake', {
+      // 1. Create the order from the structured form.
+      //
+      // Deliberately NOT /intake: that endpoint runs an LLM to parse free text,
+      // which would spend money before the client has paid — and would only be
+      // re-deriving fields this form already collected exactly.
+      const createRes = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}` },
-        body: JSON.stringify({ clientId: 'mock-client-id', brief, projectType })
+        body: JSON.stringify({
+          name: `${formData.businessCategory} — ${location}`,
+          projectType,
+          businessProfile: {
+            businessName: formData.clientName,
+            businessCategory: formData.businessCategory,
+            currentAverageTransaction: Number(formData.averageTransaction),
+            estimatedDailyCustomers: Number(formData.dailyCustomers),
+          },
+          locationSearch: {
+            targetCity: location,
+            estimatedInitialInvestment: Number(formData.estimatedInitialInvestment),
+          },
+        })
       });
 
-      if (!intakeRes.ok) throw new Error('Failed to create project');
-      const { project } = await intakeRes.json();
+      if (!createRes.ok) {
+        const payload = await createRes.json().catch(() => ({}));
+        throw new Error(payload.error ?? 'Failed to create order');
+      }
+      const project = await createRes.json();
 
       // 2. For a validation order, attach the premises the client named. This
       // is what the report will be about — without it the pipeline has nothing
@@ -111,14 +130,8 @@ export const NewOrder: React.FC = () => {
         throw new Error(`Still missing required input(s): ${fields}`);
       }
 
-      // 4. Queue the job.
-      const jobRes = await fetch(`/api/projects/${project.id}/generate-full-report`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
-      });
-
-      if (!jobRes.ok) throw new Error('Failed to queue job');
-
+      // 4. Analysis starts only after the transfer is verified, so the client
+      // goes to the payment step rather than straight into the pipeline.
       navigate(`/projects/${project.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit order');

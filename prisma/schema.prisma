@@ -87,6 +87,7 @@ model Project {
   financialAnalysis Json? @map("financial_analysis")
   scoringAnalysis Json? @map("scoring_analysis")
 
+  payment         Payment?
   businessProfile BusinessProfile?
   locationSearch  LocationSearch?
   candidates      LocationCandidate[]
@@ -96,6 +97,52 @@ model Project {
   propertyListings PropertyListing[]
 
   @@map("projects")
+}
+
+/// Payment for one order.
+///
+/// The analysis pipeline calls paid LLM and maps APIs, so it must never run on
+/// an unpaid order. Work begins only once an owner has verified the transfer:
+///
+///   AWAITING_PAYMENT -> AWAITING_CONFIRMATION -> APPROVED
+///                                             -> REJECTED
+///
+/// Payment is currently a manual bank transfer the owner reconciles against
+/// their own statement, so the client submits a reference rather than the money
+/// passing through this system.
+model Payment {
+  id             String    @id @default(uuid())
+  projectId      String    @unique @map("project_id")
+  clientId       String    @map("client_id")
+
+  /// Price quoted when the order was placed, kept even if the price list later
+  /// changes, so an old invoice still says what the client actually owed.
+  amount         Float
+  currency       String    @default("IDR")
+  method         String    @default("BANK_TRANSFER")
+
+  status         String    @default("AWAITING_PAYMENT")
+
+  /// What the client says they sent: sender name, bank, transfer reference.
+  senderName     String?   @map("sender_name")
+  senderBank     String?   @map("sender_bank")
+  reference      String?
+  transferredAt  DateTime? @map("transferred_at")
+  confirmedAt    DateTime? @map("confirmed_at")
+
+  /// Owner's decision.
+  approvedAt     DateTime? @map("approved_at")
+  approvedBy     String?   @map("approved_by")
+  rejectedReason String?   @map("rejected_reason")
+
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([clientId])
+  @@map("payments")
 }
 
 model BusinessProfile {

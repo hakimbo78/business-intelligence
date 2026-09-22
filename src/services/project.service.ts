@@ -1,6 +1,7 @@
 import { projectRepository, CreateProjectInput } from '../repositories/project.repository.js';
 import { logger } from '../lib/logger.js';
 import { isProjectType, PROJECT_TYPES } from '../lib/project-types.js';
+import { paymentService } from './payment.service.js';
 
 export class ProjectService {
   async createProject(input: CreateProjectInput) {
@@ -14,6 +15,15 @@ export class ProjectService {
       'Creating new project'
     );
     const project = await projectRepository.createProject(input);
+
+    // Every order carries an invoice from the moment it exists. Without one,
+    // the payment gate would have nothing to check.
+    await paymentService.createForProject(
+      project.id,
+      project.clientId,
+      project.projectType
+    );
+
     return project;
   }
 
