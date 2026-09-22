@@ -13,6 +13,7 @@ import {
   RouteResult,
 } from './location-provider.interface.js';
 import { logger } from '../../lib/logger.js';
+import { describeGoogleMapsFailure } from './location-provider.error.js';
 
 export class GoogleMapsProvider implements LocationProvider {
   readonly providerName = 'GoogleMapsProvider';
@@ -69,8 +70,12 @@ export class GoogleMapsProvider implements LocationProvider {
         },
       };
     } catch (error) {
-      logger.error({ err: error }, 'Google Maps searchPlaces failed');
-      throw error;
+      const described = describeGoogleMapsFailure(error, 'searchPlaces');
+      logger.error(
+        { err: error, isConfigurationProblem: described.isConfigurationProblem },
+        described.message
+      );
+      throw described;
     }
   }
 
@@ -112,8 +117,12 @@ export class GoogleMapsProvider implements LocationProvider {
         },
       };
     } catch (error) {
-      logger.error({ err: error }, 'Google Maps getPlaceDetails failed');
-      throw error;
+      const described = describeGoogleMapsFailure(error, 'getPlaceDetails');
+      logger.error(
+        { err: error, isConfigurationProblem: described.isConfigurationProblem },
+        described.message
+      );
+      throw described;
     }
   }
 
@@ -149,8 +158,12 @@ export class GoogleMapsProvider implements LocationProvider {
         },
       };
     } catch (error) {
-      logger.error({ err: error }, 'Google Maps geocode failed');
-      throw error;
+      const described = describeGoogleMapsFailure(error, 'geocode');
+      logger.error(
+        { err: error, isConfigurationProblem: described.isConfigurationProblem },
+        described.message
+      );
+      throw described;
     }
   }
 
@@ -186,8 +199,12 @@ export class GoogleMapsProvider implements LocationProvider {
         },
       };
     } catch (error) {
-      logger.error({ err: error }, 'Google Maps calculateRoute failed');
-      throw error;
+      const described = describeGoogleMapsFailure(error, 'calculateRoute');
+      logger.error(
+        { err: error, isConfigurationProblem: described.isConfigurationProblem },
+        described.message
+      );
+      throw described;
     }
   }
 }
