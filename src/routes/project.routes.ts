@@ -14,6 +14,8 @@ import { reportAgent } from '../agents/report.agent.js';
 import { qaAgent } from '../agents/qa.agent.js';
 import { CreateProjectInput } from '../repositories/project.repository.js';
 import { jobService } from '../queue/job.service.js';
+import { premisesService, type AttachPremisesInput } from '../services/premises.service.js';
+import { PropertyNormalizationError } from '../lib/property-normalizer.js';
 import { prisma } from '../config/database.js';
 import {
   PROJECT_TYPES,
@@ -214,6 +216,42 @@ export async function projectRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: (error as Error).message });
     }
   });
+
+  /**
+   * Attach a premises the client has chosen (VALIDATION / COMPARISON).
+   * Creates the candidate the report will be about, and records the rent as an
+   * observation for the area benchmark.
+   */
+  app.post<{ Params: { id: string }; Body: AttachPremisesInput }>(
+    '/:id/premises',
+    async (request, reply) => {
+      try {
+        const result = await premisesService.attachPremises(
+          request.params.id,
+          request.body ?? ({} as AttachPremisesInput)
+        );
+        return reply.status(201).send(result);
+      } catch (error) {
+        if (error instanceof PropertyNormalizationError) {
+          return reply.status(400).send({ error: error.message });
+        }
+        request.log.error({ err: error }, 'Failed to attach premises');
+        return reply.status(400).send({ error: (error as Error).message });
+      }
+    }
+  );
+
+  app.delete<{ Params: { id: string; candidateId: string } }>(
+    '/:id/premises/:candidateId',
+    async (request, reply) => {
+      try {
+        await premisesService.detachPremises(request.params.id, request.params.candidateId);
+        return reply.status(204).send();
+      } catch (error) {
+        return reply.status(404).send({ error: (error as Error).message });
+      }
+    }
+  );
 
   app.post<{ Params: { id: string } }>('/:id/research-plan', async (request, reply) => {
     try {

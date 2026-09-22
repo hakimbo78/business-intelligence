@@ -35,7 +35,7 @@ describe('Property rent benchmark', () => {
   });
 
   afterAll(async () => {
-    await prisma.propertyListing.deleteMany({});
+    await prisma.propertyListing.deleteMany({ where: { address: { startsWith: 'Benchmark Suite' } } });
     await prisma.client.deleteMany({ where: { email: 'property.test@example.com' } });
     await app.close();
   });
@@ -55,7 +55,7 @@ describe('Property rent benchmark', () => {
       url: '/api/properties',
       payload: {
         source: 'SCRAPED_FROM_MARKETPLACE',
-        address: 'Jl. Kemang Raya No. 9',
+        address: 'Benchmark Suite Jl. Tolak',
         latitude: LAT,
         longitude: LNG,
         monthlyRent: 5_000_000,
@@ -73,7 +73,7 @@ describe('Property rent benchmark', () => {
       payload: {
         projectId,
         source: 'CUSTOMER_SUBMITTED',
-        address: 'Jl. Kemang Raya No. 1',
+        address: 'Benchmark Suite Jl. Satu',
         latitude: LAT,
         longitude: LNG,
         propertyType: 'Ruko',
@@ -97,7 +97,7 @@ describe('Property rent benchmark', () => {
       url: '/api/properties',
       payload: {
         source: 'FIELD_SURVEY',
-        address: 'Jl. Kemang Raya No. 2',
+        address: 'Benchmark Suite Jl. Dua',
         latitude: LAT + 0.0005,
         longitude: LNG,
         propertyType: 'Ruko',
@@ -106,8 +106,12 @@ describe('Property rent benchmark', () => {
       },
     });
 
+    // Scoped to this test's own addresses: other suites share the database.
     const observed = await prisma.propertyListing.findMany({
-      where: { monthlyRent: { not: null } },
+      where: {
+        monthlyRent: { not: null },
+        address: { startsWith: 'Benchmark Suite' },
+      },
       select: { monthlyRent: true },
     });
 
@@ -127,8 +131,9 @@ describe('Property rent benchmark', () => {
     expect(response.statusCode).toBe(200);
     const data = JSON.parse(response.payload);
 
-    // One submitted for this project, one contributed to the shared pool.
-    expect(data.length).toBe(2);
+    // One submitted for this project, plus whatever is in the shared pool.
+    expect(data.length).toBeGreaterThanOrEqual(2);
+    expect(data.some((l: { projectId: string | null }) => l.projectId === projectId)).toBe(true);
   });
 
   it('POST /api/properties/:id/verify - should record field verification', async () => {

@@ -61,7 +61,30 @@ export const NewOrder: React.FC = () => {
       if (!intakeRes.ok) throw new Error('Failed to create project');
       const { project } = await intakeRes.json();
 
-      // 2. Send the figures the customer typed as structured values rather than
+      // 2. For a validation order, attach the premises the client named. This
+      // is what the report will be about — without it the pipeline has nothing
+      // to assess. The rent is also recorded as an observation for the area.
+      if (modelType === 'validation') {
+        const premisesRes = await fetch(`/api/projects/${project.id}/premises`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: 'CUSTOMER_SUBMITTED',
+            address: formData.address,
+            ...(formData.latitude ? { latitude: Number(formData.latitude) } : {}),
+            ...(formData.longitude ? { longitude: Number(formData.longitude) } : {}),
+            ...(formData.propertySize ? { sizeSqm: Number(formData.propertySize) } : {}),
+            ...(formData.monthlyRent ? { monthlyRent: Number(formData.monthlyRent) } : {}),
+          })
+        });
+
+        if (!premisesRes.ok) {
+          const payload = await premisesRes.json().catch(() => ({}));
+          throw new Error(payload.error ?? 'Failed to attach the property');
+        }
+      }
+
+      // 3. Send the figures the customer typed as structured values rather than
       // relying on the model to re-extract them from prose. These drive the
       // payback calculation, so they must arrive exactly as entered.
       const inputsRes = await fetch(`/api/projects/${project.id}/financial-inputs`, {
@@ -71,8 +94,6 @@ export const NewOrder: React.FC = () => {
           estimatedInitialInvestment: Number(formData.estimatedInitialInvestment),
           currentAverageTransaction: Number(formData.averageTransaction),
           estimatedDailyCustomers: Number(formData.dailyCustomers),
-          ...(formData.monthlyRent ? { maximumMonthlyRent: Number(formData.monthlyRent) } : {}),
-          ...(formData.propertySize ? { targetPropertySize: Number(formData.propertySize) } : {}),
         })
       });
 
@@ -89,7 +110,7 @@ export const NewOrder: React.FC = () => {
         throw new Error(`Still missing required input(s): ${fields}`);
       }
 
-      // 3. Queue the job.
+      // 4. Queue the job.
       const jobRes = await fetch(`/api/projects/${project.id}/generate-full-report`, {
         method: 'POST'
       });
