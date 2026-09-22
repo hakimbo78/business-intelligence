@@ -145,6 +145,11 @@ Ground every statement in the data below. Do not soften a bad result: if the
 scenarios lose money, say so plainly in the first sentence. Never promise an
 outcome — avoid "pasti berhasil", "dijamin", "lokasi terbaik".
 
+The revenue figures rest entirely on a customer count the client estimated
+themselves. If the sensitivity analysis shows a thin margin of safety, or an
+estimate below break-even, say so in the executive summary — that is more
+useful than restating the projection.
+
 The validation checklist must be specific to THIS location and business, not
 generic advice. Good items name what to count, when, and where: jumlah orang
 lewat pada jam 07.00-09.00 di depan properti, tarif sewa aktual dari pemilik,

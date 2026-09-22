@@ -141,6 +141,83 @@ function premisesSection(report: StructuredReport): string {
       }`;
 }
 
+
+/**
+ * The threshold, rather than the projection.
+ *
+ * Every revenue figure descends from one number the customer guessed. Showing
+ * what the business must clear — and how much room the guess leaves — turns the
+ * report from "here is what your estimate implies" into "here is the bar, go
+ * and check whether you can clear it".
+ */
+function sensitivitySection(report: StructuredReport): string {
+  const s = (report.analysis as any)?.financial?.sensitivity;
+  if (!s?.points?.length) return '';
+
+  const rows = s.points
+    .map((p: any) => {
+      const highlight = p.isAssumption ? ' style="background:#eaf4fb;font-weight:bold"' : '';
+      return `
+            <tr${highlight}>
+              <td>${p.customersPerDay}${p.isAssumption ? ' &larr; perkiraan Anda' : ''}</td>
+              <td>${money(p.monthlyRevenue)}</td>
+              <td style="color:${p.operatingProfit >= 0 ? '#27ae60' : '#e74c3c'}">${money(p.operatingProfit)}</td>
+              <td>${p.paybackPeriodMonths === null ? 'Tidak balik modal' : `${p.paybackPeriodMonths} bulan`}</td>
+            </tr>`;
+    })
+    .join('');
+
+  const margin =
+    s.marginOfSafetyPercent === null
+      ? UNAVAILABLE
+      : `${s.marginOfSafetyPercent}%`;
+
+  const marginColour =
+    s.marginOfSafetyPercent === null ? '#7f8c8d'
+      : s.marginOfSafetyPercent < 0 ? '#e74c3c'
+      : s.marginOfSafetyPercent < 25 ? '#f39c12'
+      : '#27ae60';
+
+  return `
+      <h2>8. Titik Impas &amp; Uji Ketahanan</h2>
+      <div class="panel">
+        <table style="margin-top:0">
+          <tr>
+            <th style="width:55%">Pelanggan per hari untuk tidak rugi (titik impas)</th>
+            <td style="font-size:20px;font-weight:bold">${esc(s.breakEvenCustomersPerDay)} orang/hari</td>
+          </tr>
+          <tr>
+            <th>Perkiraan Anda</th>
+            <td>${esc(s.assumedCustomersPerDay)} orang/hari</td>
+          </tr>
+          <tr>
+            <th>Jarak aman (boleh meleset sampai)</th>
+            <td style="color:${marginColour};font-weight:bold">${margin}</td>
+          </tr>
+        </table>
+      </div>
+
+      <p class="note">
+        Tabel berikut menunjukkan apa yang terjadi jika jumlah pelanggan berbeda dari
+        perkiraan Anda. Baris bertanda adalah perkiraan yang Anda berikan.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Pelanggan / hari</th>
+            <th>Pendapatan bulanan</th>
+            <th>Laba operasional</th>
+            <th>Balik modal</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <div class="warning">
+        <ul>${(s.notes ?? []).map((n: string) => `<li>${esc(n)}</li>`).join('')}</ul>
+      </div>`;
+}
+
 /**
  * The competitors found, named.
  *
@@ -151,7 +228,7 @@ function competitorSection(report: StructuredReport): string {
   const competitors = report.competitors ?? [];
   if (competitors.length === 0) {
     return `
-      <h2>8. Pesaing di Sekitar Lokasi</h2>
+      <h2>9. Pesaing di Sekitar Lokasi</h2>
       <div class="panel"><em>${UNAVAILABLE}</em></div>`;
   }
 
@@ -169,7 +246,7 @@ function competitorSection(report: StructuredReport): string {
     .join('');
 
   return `
-      <h2>8. Pesaing di Sekitar Lokasi</h2>
+      <h2>9. Pesaing di Sekitar Lokasi</h2>
       <p class="note">
         ${competitors.length} pesaing terdekat, diurutkan dari yang paling dekat.
         Jumlah ulasan menunjukkan seberapa ramai sebuah tempat — bukan ukuran mutlak,
@@ -213,7 +290,7 @@ function scoreSection(report: StructuredReport): string {
     .join('');
 
   return `
-      <h2>9. Rincian Skor</h2>
+      <h2>10. Rincian Skor</h2>
       <p class="note">
         Skor keseluruhan adalah rata-rata sepuluh dimensi di bawah ini. Setiap skor
         disertai dasar penilaiannya, sehingga Anda dapat menilai sendiri apakah
@@ -323,6 +400,8 @@ export function renderReportHtml(report: StructuredReport): string {
         <tbody>${scenarioRows}</tbody>
       </table>
 
+      ${sensitivitySection(report)}
+
       <h2>Asumsi &amp; Catatan Penting</h2>
       <div class="warning">
         <ul>${list(synthesis?.assumptions)}</ul>
@@ -332,14 +411,14 @@ export function renderReportHtml(report: StructuredReport): string {
 
       ${scoreSection(report)}
 
-      <h2>10. Hipotesis Celah Pasar</h2>
+      <h2>11. Hipotesis Celah Pasar</h2>
       <div class="panel">
         <strong>Rekomendasi Keseluruhan:</strong>
         ${esc(analysis.marketGap?.overallRecommendation)}
         <p>${esc(analysis.marketGap?.summary)}</p>
       </div>
 
-      <h2>11. Daftar Periksa Validasi Lapangan</h2>
+      <h2>12. Daftar Periksa Validasi Lapangan</h2>
       <ul>${list(synthesis?.validationChecklist)}</ul>
 
       <div class="disclaimer">

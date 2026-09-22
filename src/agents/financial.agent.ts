@@ -1,5 +1,6 @@
 import { projectService } from '../services/project.service.js';
 import { calculateScenarios, FinancialInputs, FinancialAnalysisResult } from '../lib/financial-calculator.js';
+import { analyseSensitivity, type SensitivityAnalysis } from '../lib/sensitivity.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../config/database.js';
 import {
@@ -26,7 +27,7 @@ export class FinancialAgent {
   async analyzeFinancials(
     projectId: string,
     overrides?: Partial<FinancialInputs>
-  ): Promise<FinancialAnalysisResult & { assumptions: string[] }> {
+  ): Promise<FinancialAnalysisResult & { assumptions: string[]; sensitivity: SensitivityAnalysis }> {
     logger.info({ projectId }, 'FinancialAgent calculating financial projections');
 
     // 1. Fetch project
@@ -103,6 +104,9 @@ export class FinancialAgent {
     // assumption rather than presented as fact (DEVELOPMENT_RULES.md §11).
     const analysis = {
       ...result,
+      // The threshold matters more than the projection: it is the one number
+      // the customer can go and test for themselves.
+      sensitivity: analyseSensitivity(inputs),
       assumptions: [
         ...describeFinancialAssumptions(project),
         ...describeRentBasis(resolvedRent.basis, premises !== null),

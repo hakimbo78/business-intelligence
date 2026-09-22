@@ -165,3 +165,38 @@ describe('Location context in the report', () => {
     expect(html).not.toContain('Konteks Lokasi');
   });
 });
+
+describe('Break-even section in the report', () => {
+  const withSensitivity = (sensitivity: unknown) => renderReportHtml({
+    ...(base as object),
+    premises: null,
+    analysis: { financial: { sensitivity } },
+  } as never);
+
+  it('should lead with the threshold, not the projection', () => {
+    const html = withSensitivity({
+      breakEvenCustomersPerDay: 22,
+      assumedCustomersPerDay: 50,
+      marginOfSafetyPercent: 56,
+      points: [
+        { customersPerDay: 20, monthlyRevenue: 52_000_000, operatingProfit: -2_000_000, paybackPeriodMonths: null, isViable: false, isAssumption: false },
+        { customersPerDay: 50, monthlyRevenue: 130_000_000, operatingProfit: 37_000_000, paybackPeriodMonths: 6.8, isViable: true, isAssumption: true },
+      ],
+      notes: ['Angka 50 pelanggan/hari berasal dari perkiraan Anda sendiri.'],
+    });
+
+    expect(html).toContain('Titik Impas');
+    expect(html).toContain('22 orang/hari');
+    expect(html).toContain('56%');
+    // The customer's own row is marked so they can find themselves in it.
+    expect(html).toContain('perkiraan Anda');
+    // A loss-making level shows no payback rather than a misleading number.
+    expect(html).toContain('Tidak balik modal');
+    expect(html).toContain('berasal dari perkiraan Anda sendiri');
+  });
+
+  it('should leave the section out when there is no sensitivity analysis', () => {
+    const html = renderReportHtml({ ...(base as object), premises: null } as never);
+    expect(html).not.toContain('Titik Impas');
+  });
+});
