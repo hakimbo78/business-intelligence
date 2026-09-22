@@ -47,6 +47,57 @@ const DIMENSION_LABEL: Record<string, string> = {
   confidence: 'Keyakinan Data',
 };
 
+
+/**
+ * What is around the location, and what we did not measure.
+ *
+ * The honesty of this section is the point. A customer comparing this with a
+ * telco's mobile-positioning product should learn where our evidence stops
+ * from the report itself, not from being surprised later.
+ */
+function locationContextSection(report: StructuredReport): string {
+  const context = (report.analysis as any)?.demand?.locationContext;
+  if (!context?.facilities?.length) return '';
+
+  const rows = context.facilities
+    .map(
+      (f: any) => `
+            <tr>
+              <td>${esc(f.label)}</td>
+              <td>${
+                f.distanceMeters === null
+                  ? `<em>tidak ada dalam ${context.searchRadiusMeters} m</em>`
+                  : `${f.distanceMeters} m`
+              }</td>
+              <td>${f.name ? esc(f.name) : '—'}</td>
+            </tr>`
+    )
+    .join('');
+
+  const notMeasured = (context.notMeasured ?? [])
+    .map((n: string) => `<li>${esc(n)}</li>`)
+    .join('');
+
+  return `
+      <h2>4. Konteks Lokasi</h2>
+      <p class="note">
+        Jarak ke fasilitas terdekat, diukur dari titik properti. Semua angka ini
+        dapat Anda periksa sendiri di lapangan.
+      </p>
+      <table>
+        <thead><tr><th>Fasilitas</th><th>Jarak terdekat</th><th>Nama</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${
+        notMeasured
+          ? `<div class="warning">
+        <strong>Yang TIDAK kami ukur dalam laporan ini:</strong>
+        <ul>${notMeasured}</ul>
+      </div>`
+          : ''
+      }`;
+}
+
 /**
  * The property under assessment.
  *
@@ -68,7 +119,7 @@ function premisesSection(report: StructuredReport): string {
       : `${cost.occupancyCostRatio}% dari pendapatan setahun`;
 
   return `
-      <h2>4. Properti yang Dinilai</h2>
+      <h2>5. Properti yang Dinilai</h2>
       <div class="panel">
         <strong>${esc(premises.name)}</strong><br>
         ${esc(premises.address)}
@@ -100,7 +151,7 @@ function competitorSection(report: StructuredReport): string {
   const competitors = report.competitors ?? [];
   if (competitors.length === 0) {
     return `
-      <h2>7. Pesaing di Sekitar Lokasi</h2>
+      <h2>8. Pesaing di Sekitar Lokasi</h2>
       <div class="panel"><em>${UNAVAILABLE}</em></div>`;
   }
 
@@ -118,7 +169,7 @@ function competitorSection(report: StructuredReport): string {
     .join('');
 
   return `
-      <h2>7. Pesaing di Sekitar Lokasi</h2>
+      <h2>8. Pesaing di Sekitar Lokasi</h2>
       <p class="note">
         ${competitors.length} pesaing terdekat, diurutkan dari yang paling dekat.
         Jumlah ulasan menunjukkan seberapa ramai sebuah tempat — bukan ukuran mutlak,
@@ -162,7 +213,7 @@ function scoreSection(report: StructuredReport): string {
     .join('');
 
   return `
-      <h2>8. Rincian Skor</h2>
+      <h2>9. Rincian Skor</h2>
       <p class="note">
         Skor keseluruhan adalah rata-rata sepuluh dimensi di bawah ini. Setiap skor
         disertai dasar penilaiannya, sehingga Anda dapat menilai sendiri apakah
@@ -248,15 +299,17 @@ export function renderReportHtml(report: StructuredReport): string {
         <p>${esc(analysis.competition?.summary)}</p>
       </div>
 
+      ${locationContextSection(report)}
+
       ${premisesSection(report)}
 
-      <h2>5. Kandidat Lokasi</h2>
+      <h2>6. Kandidat Lokasi</h2>
       <div class="panel">
         <strong>Teridentifikasi:</strong> ${esc(report.candidates?.totalIdentified)} &nbsp;|&nbsp;
         <strong>Masuk daftar pendek:</strong> ${esc(report.candidates?.shortlistedCount)}
       </div>
 
-      <h2>6. Skenario Finansial</h2>
+      <h2>7. Skenario Finansial</h2>
       <table>
         <thead>
           <tr>
@@ -279,14 +332,14 @@ export function renderReportHtml(report: StructuredReport): string {
 
       ${scoreSection(report)}
 
-      <h2>9. Hipotesis Celah Pasar</h2>
+      <h2>10. Hipotesis Celah Pasar</h2>
       <div class="panel">
         <strong>Rekomendasi Keseluruhan:</strong>
         ${esc(analysis.marketGap?.overallRecommendation)}
         <p>${esc(analysis.marketGap?.summary)}</p>
       </div>
 
-      <h2>10. Daftar Periksa Validasi Lapangan</h2>
+      <h2>11. Daftar Periksa Validasi Lapangan</h2>
       <ul>${list(synthesis?.validationChecklist)}</ul>
 
       <div class="disclaimer">

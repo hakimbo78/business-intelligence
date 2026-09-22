@@ -130,3 +130,38 @@ describe('Competitors and scoring in the report', () => {
     expect(html).not.toContain('Field Validation Checklist');
   });
 });
+
+describe('Location context in the report', () => {
+  it('should show measured distances and state what was not measured', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      premises: null,
+      analysis: {
+        demand: {
+          locationContext: {
+            searchRadiusMeters: 3000,
+            facilities: [
+              { key: 'school', label: 'Sekolah', distanceMeters: 992, name: 'SDN Depok 1' },
+              { key: 'mall', label: 'Pusat perbelanjaan', distanceMeters: null, name: null },
+            ],
+            notMeasured: ['Jumlah penduduk dan komposisi usia tidak diukur.'],
+          },
+        },
+      },
+    } as never);
+
+    expect(html).toContain('Konteks Lokasi');
+    expect(html).toContain('992 m');
+    expect(html).toContain('SDN Depok 1');
+    // An absent facility is a finding, not an omission.
+    expect(html).toContain('tidak ada dalam 3000 m');
+    // And the limits of the evidence are stated to the customer.
+    expect(html).toContain('Yang TIDAK kami ukur');
+    expect(html).toContain('Jumlah penduduk dan komposisi usia tidak diukur.');
+  });
+
+  it('should leave the section out when no catchment was measured', () => {
+    const html = renderReportHtml({ ...(base as object), premises: null } as never);
+    expect(html).not.toContain('Konteks Lokasi');
+  });
+});
