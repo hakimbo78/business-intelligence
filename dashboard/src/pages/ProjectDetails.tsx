@@ -44,7 +44,12 @@ interface ReportData {
   status: string;
   createdAt: string;
   contentJson: ReportContent;
-  qaReview: { isApproved: boolean; issues: string[]; confidenceScore?: number } | null;
+  qaReview: {
+    isApproved: boolean;
+    issues: string[];
+    advisoryConcerns?: string[];
+    confidenceScore?: number;
+  } | null;
 }
 
 const REPORT_STATUS_LABEL: Record<string, string> = {

@@ -7,12 +7,29 @@ import { REPORT_DISCLAIMER_EN } from '../lib/disclaimer.js';
 import { checkReportConsistency } from '../lib/report-consistency.js';
 
 export const qaReviewSchema = z.object({
-  isApproved: z.boolean().describe('True if the report is logically sound, fully traceable, and free of hallucinations.'),
-  issues: z.array(z.string()).describe('List of logic gaps, missing data, or contradictory statements found.'),
+  isApproved: z.boolean().describe('True if the reviewer found nothing worth raising.'),
+  issues: z.array(z.string()).describe('Concerns worth raising with the owner.'),
   confidenceScore: z.number().min(0).max(100).describe('Confidence in the evaluation.'),
 });
 
-export type QAReview = z.infer<typeof qaReviewSchema>;
+export type QAReviewModelOutput = z.infer<typeof qaReviewSchema>;
+
+export interface QAReview {
+  /**
+   * False only when a deterministic check failed.
+   *
+   * The model's concerns do not block: it once rejected a sound report by
+   * claiming Rp 10,000,000 per month was inconsistent with Rp 120,000,000 per
+   * year. A reviewer that cannot be trusted to multiply cannot be the gate, and
+   * the owner holds final authority anyway (PROJECT_MASTER_SPEC.md §35).
+   */
+  isApproved: boolean;
+  /** Deterministic failures. Binding, and the reason a report is held back. */
+  issues: string[];
+  /** The model's observations, for the owner to weigh. Never blocking. */
+  advisoryConcerns: string[];
+  confidenceScore: number;
+}
 
 export class QAAgent {
   private aiProvider = createAIProvider(env.AI_PROVIDER);
@@ -31,16 +48,34 @@ export class QAAgent {
     }
 
     // 2. Perform AI review
-    const prompt = `You are a strict QA Auditor for a business intelligence system.
-Your job is to review the following generated JSON report for logical consistency, data completeness, and to ensure there are no hallucinated claims in the executive summary that contradict the raw data.
+    const prompt = `You are a QA reviewer for a location intelligence report.
+Raise anything the owner should consider before sending this to a paying customer.
 
 REPORT:
 ${JSON.stringify(report.contentJson, null, 2)}
 
-If the report is perfectly consistent, set isApproved to true and leave issues empty.
-If you find contradictory numbers, unsupported claims, or missing critical sections, set isApproved to false and list the exact issues.`;
+WHAT IS A DEFECT:
+- The executive summary claiming something the numbers contradict, for example
+  calling a location viable when every scenario shows a negative operating profit.
+- A figure in the prose that does not appear anywhere in the data.
+- Language promising an outcome, such as "guaranteed" or "certain to succeed".
+- A conclusion drawn with no evidence behind it.
 
-    const aiReview = await this.aiProvider.generateStructuredData<QAReview>(
+WHAT IS NOT A DEFECT — do not raise these:
+- A null or "DATA NOT AVAILABLE" field. This product deliberately leaves unknown
+  values empty rather than estimating them; disclosing a gap honestly is correct
+  behaviour, not a fault.
+- An assumption that is clearly labelled as an assumption.
+- A negative or discouraging conclusion. Reporting that a location is unviable is
+  the product working, not a defect.
+
+BEFORE CLAIMING TWO NUMBERS CONTRADICT, DO THE ARITHMETIC.
+A monthly rent of 10,000,000 and an annual rent of 120,000,000 agree: 10,000,000 x 12
+= 120,000,000. Only report a contradiction you have actually computed.
+
+Set isApproved false only if you found a real defect from the first list.`;
+
+    const aiReview = await this.aiProvider.generateStructuredData<QAReviewModelOutput>(
       prompt,
       qaReviewSchema,
       'QAReview'
@@ -55,13 +90,13 @@ If you find contradictory numbers, unsupported claims, or missing critical secti
     const content = report.contentJson as unknown as Parameters<typeof checkReportConsistency>[0];
     const consistencyIssues = checkReportConsistency(content, REPORT_DISCLAIMER_EN);
 
-    const issues = [...aiReview.issues, ...consistencyIssues.map((i) => `[${i.code}] ${i.message}`)];
-
     const review: QAReview = {
-      ...aiReview,
-      // A deterministic failure is binding: the model cannot approve past it.
-      isApproved: aiReview.isApproved && consistencyIssues.length === 0,
-      issues,
+      // Only a deterministic failure holds a report back. The model's concerns
+      // travel with it for the owner to judge.
+      isApproved: consistencyIssues.length === 0,
+      issues: consistencyIssues.map((i) => `[${i.code}] ${i.message}`),
+      advisoryConcerns: aiReview.isApproved ? [] : aiReview.issues,
+      confidenceScore: aiReview.confidenceScore,
     };
 
     if (consistencyIssues.length > 0) {
@@ -86,7 +121,10 @@ If you find contradictory numbers, unsupported claims, or missing critical secti
         where: { id: projectId },
         data: { status: 'REVIEW' }
       });
-      logger.info({ projectId }, 'QA Agent PASSED the report; awaiting owner approval');
+      logger.info(
+        { projectId, advisoryConcerns: review.advisoryConcerns.length },
+        'QA passed the report; awaiting owner approval'
+      );
     } else {
       await prisma.report.update({
         where: { id: report.id },
@@ -97,7 +135,7 @@ If you find contradictory numbers, unsupported claims, or missing critical secti
         where: { id: projectId },
         data: { status: 'NEEDS_REVISION' }
       });
-      logger.warn({ projectId, issues: review.issues }, 'QA Agent REJECTED the report');
+      logger.warn({ projectId, issues: review.issues }, 'QA held the report back on a deterministic check');
     }
 
     return review;

@@ -69,7 +69,12 @@ export interface ReportRecord {
   createdAt: Date;
   contentJson: StructuredReport;
   /** Why a report was held back, when it was. */
-  qaReview: { isApproved: boolean; issues: string[]; confidenceScore?: number } | null;
+  qaReview: {
+    isApproved: boolean;
+    issues: string[];
+    advisoryConcerns?: string[];
+    confidenceScore?: number;
+  } | null;
 }
 
 export class ReportAgent {

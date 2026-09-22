@@ -70,7 +70,7 @@ describe('QA Agent', () => {
 
     const result = await qaAgent.reviewProject('mock-project-id');
 
-    // The mock AI provider approves, but the deterministic gate overrides it.
+    // The deterministic gate is what decides.
     expect(result.isApproved).toBe(false);
     expect(result.issues.join(' ')).toMatch(/disclaimer/i);
 
@@ -109,5 +109,30 @@ describe('QA Agent', () => {
 
     await expect(qaAgent.reviewProject('mock-project-id'))
       .rejects.toThrow('No generated report found');
+  });
+
+  it('should not let the reviewer block a report over its own arithmetic', async () => {
+    // The live model once rejected a sound report by claiming Rp 10,000,000 a
+    // month contradicted Rp 120,000,000 a year. A reviewer that cannot multiply
+    // must not be the gate.
+    (prisma.report.findFirst as any).mockResolvedValueOnce({
+      id: 'mock-report-id',
+      contentJson: {
+        disclaimer: REPORT_DISCLAIMER_EN,
+        synthesis: { executiveSummary: 'The location is not viable at this rent.', assumptions: [] },
+        analysis: { financial: { scenarios: [{ scenarioName: 'BASE', isViable: false }] } },
+        candidates: { shortlistedCount: 1, shortlisted: [{}] },
+      },
+    });
+
+    const result = await qaAgent.reviewProject('mock-project-id');
+
+    expect(result.isApproved).toBe(true);
+    expect(result.issues).toEqual([]);
+
+    // The report reaches the owner, not a dead end.
+    expect(prisma.project.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'REVIEW' } })
+    );
   });
 });
