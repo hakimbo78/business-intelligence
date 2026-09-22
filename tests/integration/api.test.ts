@@ -24,7 +24,8 @@ describe('API Integration Tests', () => {
 
   afterAll(async () => {
     await app.close();
-    await prisma.client.deleteMany();
+    // Scoped: a bare deleteMany() cascades into other suites' projects.
+    await prisma.client.deleteMany({ where: { email: 'api.test@example.com' } });
   });
 
   it('POST /api/projects - should create a project', async () => {

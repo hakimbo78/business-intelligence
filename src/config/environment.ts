@@ -37,6 +37,23 @@ const envSchema = z.object({
 
   // CORS (required in production so the allow-list is never implicit)
   CORS_ALLOWED_ORIGINS: z.string().optional(),
+
+  // --- Authentication ---
+  // Google OAuth client id. The dashboard signs in with Google and sends the
+  // resulting ID token; the API verifies it against this audience.
+  GOOGLE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
+  // Signing key for our own session tokens. Must be long enough that it cannot
+  // be brute-forced: a forged token is a full account takeover.
+  JWT_SECRET: z.string().min(32).optional(),
+  JWT_EXPIRES_IN: z.string().default('12h'),
+  // Comma-separated addresses granted the OWNER role. Everyone else who signs
+  // in is a CLIENT. Nobody can promote themselves.
+  OWNER_EMAILS: z.string().optional(),
+  // Escape hatch for local development and tests only; refused in production.
+  AUTH_DISABLED: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -75,6 +92,27 @@ function loadEnvironment(): Env {
 
   if (env.AI_PROVIDER === 'openrouter' && !env.OPENROUTER_API_KEY) {
     throw new Error('❌ OPENROUTER_API_KEY is required when AI_PROVIDER=openrouter');
+  }
+
+  // Authentication must be fully configured unless it is explicitly disabled
+  // for local work — and it can never be disabled in production.
+  if (env.AUTH_DISABLED && env.NODE_ENV === 'production') {
+    throw new Error('❌ AUTH_DISABLED cannot be used when NODE_ENV=production');
+  }
+
+  if (!env.AUTH_DISABLED) {
+    const missing: string[] = [];
+    if (!env.GOOGLE_OAUTH_CLIENT_ID) missing.push('GOOGLE_OAUTH_CLIENT_ID');
+    if (!env.JWT_SECRET) missing.push('JWT_SECRET');
+    if (!env.OWNER_EMAILS) missing.push('OWNER_EMAILS');
+
+    if (missing.length > 0) {
+      throw new Error(
+        `❌ Authentication is enabled but not configured. Missing: ${missing.join(', ')}.
+` +
+          'Set AUTH_DISABLED=true for local development without sign-in.'
+      );
+    }
   }
 
   // Production must name its allowed origins. Previously CORS was disabled

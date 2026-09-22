@@ -31,8 +31,36 @@ model Client {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   projects  Project[]
+  users     User[]
 
   @@map("clients")
+}
+
+/// A person who can sign in.
+///
+/// Identity comes from Google — we never store a password. Role decides reach:
+/// OWNER sees every order, CLIENT sees only the orders belonging to their own
+/// Client record (PROJECT_MASTER_SPEC.md §26, §27).
+///
+/// OWNER is never self-assigned: it is granted only to addresses on the
+/// OWNER_EMAILS allow-list, checked at sign-in.
+model User {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  name        String?
+  /// Google's stable subject identifier. Email can change; this cannot.
+  googleSub   String?   @unique @map("google_sub")
+  role        String    @default("CLIENT") // OWNER | CLIENT
+  /// The Client whose orders this user may see. Null for OWNER.
+  clientId    String?   @map("client_id")
+  lastLoginAt DateTime? @map("last_login_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  client      Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@map("users")
 }
 
 model Project {

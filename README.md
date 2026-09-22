@@ -241,8 +241,31 @@ Each pipeline stage is also exposed individually (`/research-plan`,
 `/market-gap-analysis`, `/accessibility-analysis`, `/financial-analysis`,
 `/scoring`, `/shortlist`, `/report`, `/qa`) for debugging and re-runs.
 
-> **Not yet built:** authentication, authorization and rate limiting. Do not
-> expose this API publicly (PROJECT_MASTER_SPEC.md §26).
+### Authentication and Access
+
+Sign-in is Google only — no passwords are stored. The dashboard obtains a Google
+ID token, `POST /api/auth/google` verifies it against Google's keys and our own
+client id, and returns a short-lived session token used as a Bearer credential.
+
+Two roles:
+
+| Role | Reach |
+|---|---|
+| `OWNER` | Every client's orders and reports |
+| `CLIENT` | Only the orders belonging to their own client record |
+
+**The owner role cannot be self-assigned.** It is granted only to addresses on
+the `OWNER_EMAILS` allow-list, and is recomputed at every sign-in — removing an
+address demotes that user on their next login.
+
+Tenancy is enforced in one place (`requireProjectAccess`), applied as a hook to
+every project route rather than per route, so a new endpoint cannot leak another
+client's data by forgetting its own check. A client requesting someone else's
+project gets `404`, not `403`: a 403 would confirm which project ids are real.
+
+The order's owner comes from the session, never from the request body.
+
+Rate limiting is global (300 req/min per user, 10/min on sign-in).
 
 ## Environment Variables
 
@@ -253,6 +276,11 @@ Each pipeline stage is also exposed individually (`/research-plan`,
 | `LOG_LEVEL` | No | `info` | Log level (fatal/error/warn/info/debug/trace) |
 | `DATABASE_URL` | **Yes** | — | PostgreSQL connection string |
 | `CORS_ALLOWED_ORIGINS` | In production | — | Comma-separated allow-list of dashboard origins |
+| `GOOGLE_OAUTH_CLIENT_ID` | Unless `AUTH_DISABLED` | — | Google OAuth client id the dashboard signs in with |
+| `JWT_SECRET` | Unless `AUTH_DISABLED` | — | Session signing key, min 32 chars |
+| `JWT_EXPIRES_IN` | No | `12h` | Session lifetime |
+| `OWNER_EMAILS` | Unless `AUTH_DISABLED` | — | Comma-separated addresses granted the OWNER role |
+| `AUTH_DISABLED` | No | `false` | Local development only; refused in production |
 | `MAP_PROVIDER` | No | `mock` | Location provider (mock/google) |
 | `GOOGLE_MAPS_API_KEY` | When `MAP_PROVIDER=google` | — | Google Maps API key |
 | `AI_PROVIDER` | No | `mock` | LLM provider (mock/gemini/openrouter) |
@@ -273,8 +301,6 @@ so a misconfiguration fails immediately rather than halfway through a customer's
 
 Recorded so nobody mistakes a gap for a finished feature:
 
-- **No authentication, authorization or rate limiting** (§26). The API is for
-  local and trusted-network use only.
 - **`VALIDATION` and `COMPARISON` orders cannot complete yet.** The pipeline
   branches correctly and refuses an order with no premises attached, but nothing
   turns the client's address into a candidate yet — that is the next piece of work.

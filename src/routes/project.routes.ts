@@ -15,6 +15,7 @@ import { qaAgent } from '../agents/qa.agent.js';
 import { CreateProjectInput } from '../repositories/project.repository.js';
 import { jobService } from '../queue/job.service.js';
 import { premisesService, type AttachPremisesInput } from '../services/premises.service.js';
+import { requireAuth, requireProjectAccess } from '../middleware/auth.middleware.js';
 import { PropertyNormalizationError } from '../lib/property-normalizer.js';
 import { prisma } from '../config/database.js';
 import {
@@ -30,6 +31,13 @@ import {
 } from '../lib/financial-inputs.js';
 
 export async function projectRoutes(app: FastifyInstance) {
+  // Everything below touches customer data.
+  app.addHook('onRequest', requireAuth);
+
+  // Tenancy is enforced once, here, rather than per route: a new /:id route
+  // cannot forget its own check and leak another client's report.
+  app.addHook('preHandler', requireProjectAccess);
+
   /** The three products, so a client can present the right order form. */
   app.get('/types', async (_request, reply) => {
     return reply.send(PROJECT_TYPES.map((t) => getProjectTypeConfig(t)));
@@ -37,7 +45,10 @@ export async function projectRoutes(app: FastifyInstance) {
 
   app.get('/', async (request, reply) => {
     try {
-      const projects = await projectService.listProjects();
+      const user = request.user!;
+      const projects = await projectService.listProjects(
+        user.role === 'OWNER' ? undefined : user.clientId ?? '__none__'
+      );
       return reply.send(projects);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to list projects');
@@ -47,7 +58,14 @@ export async function projectRoutes(app: FastifyInstance) {
 
   app.post<{ Body: CreateProjectInput }>('/', async (request, reply) => {
     try {
-      const project = await projectService.createProject(request.body);
+      const user = request.user!;
+      const clientId = user.role === 'OWNER' ? request.body.clientId : user.clientId;
+
+      if (!clientId) {
+        return reply.status(400).send({ error: 'clientId is required' });
+      }
+
+      const project = await projectService.createProject({ ...request.body, clientId });
       return reply.status(201).send(project);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to create project');
@@ -57,17 +75,24 @@ export async function projectRoutes(app: FastifyInstance) {
 
   app.post<{ Body: { clientId: string, brief: string, projectType?: string } }>('/intake', async (request, reply) => {
     try {
-      const { clientId, brief, projectType } = request.body;
-      if (!clientId || !brief) {
-        return reply.status(400).send({ error: 'clientId and brief are required' });
+      const { brief, projectType } = request.body;
+      if (!brief) {
+        return reply.status(400).send({ error: 'brief is required' });
       }
-      
-      // Ensure client exists (mocking auth)
-      await prisma.client.upsert({
-        where: { id: clientId },
-        create: { id: clientId, name: 'Mock Client', email: `${clientId}@example.com` },
-        update: {}
-      });
+
+      // The order belongs to the signed-in client. Accepting a clientId from
+      // the body would have let anyone file orders as anyone else.
+      const user = request.user!;
+      const clientId = user.role === 'OWNER' ? request.body.clientId : user.clientId;
+
+      if (!clientId) {
+        return reply.status(400).send({
+          error:
+            user.role === 'OWNER'
+              ? 'clientId is required when ordering on behalf of a client'
+              : 'Your account is not linked to a client record',
+        });
+      }
 
       const result = await intakeAgent.processBrief(clientId, brief, projectType);
       return reply.status(201).send(result);

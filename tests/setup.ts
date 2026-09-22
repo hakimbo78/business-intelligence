@@ -13,6 +13,8 @@ process.env.LOG_LEVEL = 'error';
 process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/location_intelligence?schema=public';
 process.env.MAP_PROVIDER = 'mock';
 process.env.AI_PROVIDER = 'mock';
+// Auth is exercised by its own suites, which set their own configuration.
+process.env.AUTH_DISABLED = 'true';
 // Property data comes from our own store, so integration tests exercise the
 // real provider against rows they submit themselves.
 

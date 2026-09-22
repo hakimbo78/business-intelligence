@@ -17,8 +17,9 @@ export class ProjectService {
     return project;
   }
 
-  async listProjects() {
-    return await projectRepository.listProjects();
+  /** @param clientId when set, only that client's projects are returned. */
+  async listProjects(clientId?: string) {
+    return await projectRepository.listProjects(clientId);
   }
 
   async getProject(projectId: string) {

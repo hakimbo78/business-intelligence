@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify';
+import { requireAuth } from '../middleware/auth.middleware.js';
 import { propertyRepository, type SubmitPropertyInput } from '../repositories/property.repository.js';
 import {
   PERMITTED_PROPERTY_SOURCES,
@@ -6,6 +7,8 @@ import {
 } from '../lib/property-normalizer.js';
 
 export async function propertyRoutes(app: FastifyInstance) {
+  app.addHook('onRequest', requireAuth);
+
   /**
    * The permitted sources, so a client can present the right options instead of
    * guessing and being rejected.
@@ -58,6 +61,8 @@ export async function propertyRoutes(app: FastifyInstance) {
 }
 
 export async function projectPropertyRoutes(app: FastifyInstance) {
+  app.addHook('onRequest', requireAuth);
+
   app.get<{ Params: { id: string } }>('/:id/properties', async (request, reply) => {
     try {
       const listings = await propertyRepository.listForProject(request.params.id);

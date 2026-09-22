@@ -20,7 +20,8 @@ describe('Domain Model Integration', () => {
 
   afterAll(async () => {
     // Cleanup
-    await prisma.client.deleteMany();
+    // Scoped: a bare deleteMany() cascades into other suites' projects.
+    await prisma.client.deleteMany({ where: { email: 'test@example.com' } });
   });
 
   it('should create a project with a business profile and location search', async () => {

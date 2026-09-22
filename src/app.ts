@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import { env } from './config/environment.js';
 import { testDatabaseConnection } from './config/database.js';
 import { createLocationProvider } from './providers/location/index.js';
@@ -7,6 +8,7 @@ import { logger } from './lib/logger.js';
 import { projectRoutes } from './routes/project.routes.js';
 import { locationRoutes } from './routes/location.routes.js';
 import { propertyRoutes, projectPropertyRoutes } from './routes/property.routes.js';
+import { authRoutes } from './routes/auth.routes.js';
 
 /**
  * Build the Fastify application instance.
@@ -29,6 +31,15 @@ export async function buildApp() {
         : true,
   });
 
+  // Rate limiting (PROJECT_MASTER_SPEC.md §26). Keyed by authenticated user
+  // where possible, so one noisy client cannot exhaust the budget for others.
+  await app.register(rateLimit, {
+    global: true,
+    max: 300,
+    timeWindow: '1 minute',
+    keyGenerator: (request) => request.user?.userId ?? request.ip,
+  });
+
   // Initialize location provider based on configuration
   const locationProvider = createLocationProvider(env.MAP_PROVIDER);
   logger.info('Location provider initialized', {
@@ -39,6 +50,7 @@ export async function buildApp() {
   app.decorate('locationProvider', locationProvider);
 
   // --- Routes ---
+  app.register(authRoutes, { prefix: '/api/auth' });
   app.register(projectRoutes, { prefix: '/api/projects' });
   app.register(locationRoutes, { prefix: '/api/locations' });
   app.register(propertyRoutes, { prefix: '/api/properties' });
@@ -74,6 +86,7 @@ export async function buildApp() {
       version: '0.1.0',
       description: 'AI-powered Location Decision Intelligence Platform for UMKM',
       docs: '/health',
+      authenticate: '/api/auth/google',
     };
   });
 

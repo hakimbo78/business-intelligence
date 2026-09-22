@@ -13,6 +13,11 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['src/server.ts'],
     },
+    // Integration suites share a single database, so running files in
+    // parallel lets one suite's fixtures and cleanup disturb another's.
+    // Determinism is worth more here than the few seconds it costs.
+    fileParallelism: false,
+
     // Separate unit and integration test timeouts
     testTimeout: 30000,
     hookTimeout: 30000,

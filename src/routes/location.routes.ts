@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify';
+import { requireAuth } from '../middleware/auth.middleware.js';
 import { locationService } from '../services/location.service.js';
 
 interface SearchCandidatesBody {
@@ -18,6 +19,8 @@ interface SearchCompetitorsBody {
 }
 
 export async function locationRoutes(app: FastifyInstance) {
+  app.addHook('onRequest', requireAuth);
+
   app.post<{ Body: SearchCandidatesBody }>('/search', async (request, reply) => {
     try {
       const { projectId, query, latitude, longitude, radiusMeters } = request.body;

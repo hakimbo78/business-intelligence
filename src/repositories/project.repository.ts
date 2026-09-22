@@ -83,8 +83,9 @@ export class ProjectRepository {
   /**
    * List projects, newest first, for the owner dashboard.
    */
-  async listProjects(): Promise<Project[]> {
+  async listProjects(clientId?: string): Promise<Project[]> {
     return await prisma.project.findMany({
+      where: clientId ? { clientId } : undefined,
       orderBy: { createdAt: 'desc' },
     });
   }
