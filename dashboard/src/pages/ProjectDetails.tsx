@@ -44,7 +44,15 @@ interface ReportData {
   status: string;
   createdAt: string;
   contentJson: ReportContent;
+  qaReview: { isApproved: boolean; issues: string[]; confidenceScore?: number } | null;
 }
+
+const REPORT_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Held back by QA',
+  REVIEW: 'Awaiting your approval',
+  APPROVED: 'Approved',
+  DELIVERED: 'Delivered',
+};
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -166,6 +174,12 @@ export const ProjectDetails: React.FC = () => {
           </button>
           <h1>Analysis Report</h1>
           <p className="text-muted mt-2">Project ID: {id}</p>
+          {report && (
+            <p className="text-sm mt-2">
+              Status:{' '}
+              <strong>{REPORT_STATUS_LABEL[report.status] ?? report.status}</strong>
+            </p>
+          )}
         </div>
 
         {isOwner && report?.status === 'REVIEW' && (

@@ -273,6 +273,9 @@ model Report {
   version         String   @default("1.0")
   status          String   @default("DRAFT") // DRAFT, REVIEW, APPROVED, DELIVERED
   contentJson     Json?    @map("content_json") // Stored structured report data
+  /// The QA verdict, kept so the owner can see why a report was held back
+  /// instead of finding an approve button simply absent.
+  qaReview        Json?    @map("qa_review")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

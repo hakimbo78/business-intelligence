@@ -68,6 +68,8 @@ export interface ReportRecord {
   status: string;
   createdAt: Date;
   contentJson: StructuredReport;
+  /** Why a report was held back, when it was. */
+  qaReview: { isApproved: boolean; issues: string[]; confidenceScore?: number } | null;
 }
 
 export class ReportAgent {
@@ -206,6 +208,7 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       status: report.status,
       createdAt: report.createdAt,
       contentJson: report.contentJson as unknown as StructuredReport,
+      qaReview: (report.qaReview as ReportRecord['qaReview']) ?? null,
     };
   }
 }

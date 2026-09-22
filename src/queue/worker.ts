@@ -184,12 +184,17 @@ export class QueueWorker {
     await reportAgent.generateReport(projectId);
     
     // 13. QA
-    await qaAgent.reviewProject(projectId);
+    //
+    // The QA agent sets the project status itself: REVIEW when the report is
+    // fit for the owner, NEEDS_REVISION when it is not. Setting REVIEW here
+    // unconditionally erased that verdict, leaving a rejected report looking
+    // as though it were awaiting approval.
+    const review = await qaAgent.reviewProject(projectId);
 
-    // Done -> Ready for Owner Approval
-    await projectService.updateProjectStatus(projectId, 'REVIEW');
-    
-    logger.info({ projectId }, 'Full report pipeline finished');
+    logger.info(
+      { projectId, qaApproved: review.isApproved, issueCount: review.issues.length },
+      'Full report pipeline finished'
+    );
   }
 }
 

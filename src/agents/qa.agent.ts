@@ -80,7 +80,7 @@ If you find contradictory numbers, unsupported claims, or missing critical secti
     if (review.isApproved) {
       await prisma.report.update({
         where: { id: report.id },
-        data: { status: 'REVIEW' }
+        data: { status: 'REVIEW', qaReview: review as object }
       });
       await prisma.project.update({
         where: { id: projectId },
@@ -90,7 +90,8 @@ If you find contradictory numbers, unsupported claims, or missing critical secti
     } else {
       await prisma.report.update({
         where: { id: report.id },
-        data: { status: 'DRAFT' } // Revert to draft/needs revision
+        // Kept with the report so the owner can see what must be fixed.
+        data: { status: 'DRAFT', qaReview: review as object }
       });
       await prisma.project.update({
         where: { id: projectId },

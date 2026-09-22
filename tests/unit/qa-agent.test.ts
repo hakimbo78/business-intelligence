@@ -44,7 +44,8 @@ describe('QA Agent', () => {
     expect(prisma.report.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'mock-report-id' },
-        data: { status: 'REVIEW' }
+        // The verdict is stored with the report so the owner can see it later.
+        data: expect.objectContaining({ status: 'REVIEW', qaReview: expect.anything() })
       })
     );
 
@@ -76,7 +77,7 @@ describe('QA Agent', () => {
     expect(prisma.report.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'mock-report-id' },
-        data: { status: 'DRAFT' }
+        data: expect.objectContaining({ status: 'DRAFT', qaReview: expect.anything() })
       })
     );
 
