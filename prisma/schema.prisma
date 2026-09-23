@@ -400,3 +400,28 @@ model JobQueue {
   @@index([status, createdAt])
   @@map("job_queue")
 }
+/// Billable calls to paid providers, aggregated per day and SKU.
+///
+/// Aggregated rather than one row per call: a census makes dozens of requests
+/// and the only questions anyone asks of this table are "how much this month"
+/// and "which project spent it". Both are answered by sums.
+///
+/// This is the record the cost ceiling is enforced against, so it must survive
+/// a restart — an in-memory counter would reset the budget every deploy.
+model ApiUsage {
+  id               String   @id @default(uuid())
+  /// The UTC day, midnight, so a day's rows group without a date function.
+  day              DateTime
+  sku              String
+  /// Null for calls not made on behalf of one project.
+  projectId        String?  @map("project_id")
+  calls            Int      @default(0)
+  estimatedCostUsd Float    @default(0) @map("estimated_cost_usd")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([day, sku, projectId])
+  @@index([day])
+  @@index([projectId])
+  @@map("api_usage")
+}

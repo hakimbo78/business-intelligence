@@ -19,6 +19,8 @@ import {
 } from './location-provider.interface.js';
 import { logger } from '../../lib/logger.js';
 import { describeGoogleMapsFailure, LocationProviderError } from './location-provider.error.js';
+import { costGuardService } from '../../services/cost-guard.service.js';
+import { isEnterpriseFieldMask, type BillableSku } from '../../lib/api-cost.js';
 
 /**
  * Google Maps Platform, via the current REST APIs.
@@ -54,16 +56,26 @@ const STATIC_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap';
 /** Largest size Google serves without the premium plan. */
 const MAX_IMAGE_PX = 640;
 
-/** Fields requested from Places. Asking for less costs less (§22). */
+/**
+ * Fields requested from Places.
+ *
+ * Split in two because of where Google draws its SKU boundary. `rating` and
+ * `userRatingCount` move a search from the Pro SKU to Enterprise, and the
+ * Enterprise free allowance is a fifth the size — 1,000 calls a month against
+ * 5,000. A census spends dozens of calls and does not need either field for
+ * the ones it is only counting, so it asks for the cheap mask and the report
+ * enriches the handful it actually lists.
+ */
 const PLACE_SUMMARY_FIELDS = [
   'places.id',
   'places.displayName',
   'places.formattedAddress',
   'places.location',
-  'places.rating',
-  'places.userRatingCount',
   'places.primaryType',
 ].join(',');
+
+/** The same, plus the two fields that cost a tier. */
+const PLACE_SUMMARY_FIELDS_WITH_RATINGS = [PLACE_SUMMARY_FIELDS, 'places.rating', 'places.userRatingCount'].join(',');
 
 const PLACE_DETAIL_FIELDS = [
   'id',
@@ -150,8 +162,14 @@ export class GoogleMapsProvider implements LocationProvider {
   private async request<T>(
     url: string,
     init: RequestInit,
-    operation: string
+    operation: string,
+    billing?: { sku: BillableSku; projectId?: string }
   ): Promise<T> {
+    // Checked before the call, so a ceiling is never crossed — only refused.
+    if (billing) {
+      await costGuardService.assertWithinBudget(billing.sku, 1, billing.projectId);
+    }
+
     let response: Response;
     try {
       response = await fetch(url, init);
@@ -161,6 +179,12 @@ export class GoogleMapsProvider implements LocationProvider {
         `Could not reach Google Maps for ${operation}: ${(error as Error).message}`,
         { provider: this.providerName, operation, cause: error }
       );
+    }
+
+    // Recorded whatever the outcome: Google bills a request that returns an
+    // error as readily as one that returns results.
+    if (billing) {
+      await costGuardService.record(billing.sku, 1, billing.projectId);
     }
 
     const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
@@ -213,7 +237,13 @@ export class GoogleMapsProvider implements LocationProvider {
           },
         }),
       },
-      'searchPlaces'
+      'searchPlaces',
+      {
+        sku: isEnterpriseFieldMask(PLACE_SUMMARY_FIELDS_WITH_RATINGS)
+          ? 'TEXT_SEARCH_ENTERPRISE'
+          : 'TEXT_SEARCH_PRO',
+        projectId: params.projectId,
+      }
     );
 
     const places: PlaceSummary[] = (body.places ?? []).map((p) => ({
@@ -233,6 +263,10 @@ export class GoogleMapsProvider implements LocationProvider {
   }
 
   async searchNearbyPlaces(params: SearchNearbyParams): Promise<ProviderResult<PlaceSummary[]>> {
+    const fieldMask = params.includeRatings
+      ? PLACE_SUMMARY_FIELDS_WITH_RATINGS
+      : PLACE_SUMMARY_FIELDS;
+
     const body = await this.request<{ places?: PlaceResource[] }>(
       PLACES_NEARBY_URL,
       {
@@ -240,7 +274,7 @@ export class GoogleMapsProvider implements LocationProvider {
         headers: {
           'Content-Type': 'application/json',
           'X-Goog-Api-Key': this.key,
-          'X-Goog-FieldMask': PLACE_SUMMARY_FIELDS,
+          'X-Goog-FieldMask': fieldMask,
         },
         body: JSON.stringify({
           includedTypes: params.includedTypes,
@@ -259,7 +293,13 @@ export class GoogleMapsProvider implements LocationProvider {
           },
         }),
       },
-      'searchNearbyPlaces'
+      'searchNearbyPlaces',
+      {
+        sku: isEnterpriseFieldMask(fieldMask)
+          ? 'NEARBY_SEARCH_ENTERPRISE'
+          : 'NEARBY_SEARCH_PRO',
+        projectId: params.projectId,
+      }
     );
 
     const places: PlaceSummary[] = (body.places ?? []).map((p) => ({
@@ -287,7 +327,8 @@ export class GoogleMapsProvider implements LocationProvider {
           'X-Goog-FieldMask': params.fields?.join(',') ?? PLACE_DETAIL_FIELDS,
         },
       },
-      'getPlaceDetails'
+      'getPlaceDetails',
+      { sku: 'PLACE_DETAILS_ENTERPRISE' }
     );
 
     return {
@@ -316,7 +357,8 @@ export class GoogleMapsProvider implements LocationProvider {
     const body = await this.request<GeocodeV4Response>(
       `${GEOCODE_URL}/${encodeURIComponent(params.address)}?key=${encodeURIComponent(this.key)}`,
       { method: 'GET' },
-      'geocode'
+      'geocode',
+      { sku: 'GEOCODING' }
     );
 
     const first = body.results?.[0];
@@ -376,7 +418,8 @@ export class GoogleMapsProvider implements LocationProvider {
           travelMode: params.travelMode ?? 'DRIVE',
         }),
       },
-      'calculateRoute'
+      'calculateRoute',
+      { sku: 'ROUTES' }
     );
 
     const route = body.routes?.[0];
@@ -409,8 +452,11 @@ export class GoogleMapsProvider implements LocationProvider {
     url: string,
     operation: string,
     widthPx: number,
-    heightPx: number
+    heightPx: number,
+    sku: BillableSku
   ): Promise<RenderedImage> {
+    await costGuardService.assertWithinBudget(sku, 1);
+
     let response: Response;
     try {
       response = await fetch(url);
@@ -420,6 +466,8 @@ export class GoogleMapsProvider implements LocationProvider {
         { provider: this.providerName, operation, cause: error }
       );
     }
+
+    await costGuardService.record(sku, 1);
 
     const contentType = response.headers.get('content-type') ?? '';
 
@@ -451,7 +499,7 @@ export class GoogleMapsProvider implements LocationProvider {
       status?: string;
       date?: string;
       location?: { lat?: number; lng?: number };
-    }>(url, { method: 'GET' }, 'getStreetViewAvailability');
+    }>(url, { method: 'GET' }, 'getStreetViewAvailability', { sku: 'STREET_VIEW_METADATA' });
 
     const status = body.status ?? 'UNKNOWN';
 
@@ -502,7 +550,8 @@ export class GoogleMapsProvider implements LocationProvider {
       `${STREET_VIEW_IMAGE_URL}?${query.toString()}`,
       'getStreetViewImage',
       width,
-      height
+      height,
+      'STREET_VIEW_STATIC'
     );
 
     return { data: image, provenance: this.provenance('street_view_image') };
@@ -537,7 +586,8 @@ export class GoogleMapsProvider implements LocationProvider {
       `${STATIC_MAP_URL}?${query.toString()}${markers}`,
       'getStaticMap',
       width,
-      height
+      height,
+      'STATIC_MAP'
     );
 
     return { data: image, provenance: this.provenance('static_map') };

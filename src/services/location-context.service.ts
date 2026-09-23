@@ -41,6 +41,7 @@ export class LocationContextService {
           radiusMeters: SEARCH_RADIUS_METERS,
           type: facility.types[0],
           maxResults: 20,
+          projectId,
         });
 
         if (projectId) {

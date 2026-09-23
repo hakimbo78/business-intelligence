@@ -6,6 +6,7 @@ import { testDatabaseConnection } from './config/database.js';
 import { createLocationProvider } from './providers/location/index.js';
 import { logger } from './lib/logger.js';
 import { projectRoutes } from './routes/project.routes.js';
+import { costRoutes } from './routes/cost.routes.js';
 import { locationRoutes } from './routes/location.routes.js';
 import { propertyRoutes, projectPropertyRoutes } from './routes/property.routes.js';
 import { authRoutes } from './routes/auth.routes.js';
@@ -55,6 +56,7 @@ export async function buildApp() {
   app.register(locationRoutes, { prefix: '/api/locations' });
   app.register(propertyRoutes, { prefix: '/api/properties' });
   app.register(projectPropertyRoutes, { prefix: '/api/projects' });
+  app.register(costRoutes, { prefix: '/api/admin' });
 
   /**
    * Health check endpoint.

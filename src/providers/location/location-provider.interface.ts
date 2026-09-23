@@ -99,6 +99,8 @@ export interface StaticMapParams {
 
 export interface SearchPlacesParams {
   query: string;
+  /** Attributes the call's cost to a project, for the budget ceiling. */
+  projectId?: string;
   location: Coordinates;
   radiusMeters: number;
   type?: string;
@@ -107,6 +109,16 @@ export interface SearchPlacesParams {
 
 export interface SearchNearbyParams {
   location: Coordinates;
+  /** Attributes the call's cost to a project, for the budget ceiling. */
+  projectId?: string;
+  /**
+   * Ask for rating and review count.
+   *
+   * Off by default, and deliberately so: those two fields move the request to
+   * the Enterprise SKU, whose free allowance is a fifth the size. A census
+   * counting competitors does not need them.
+   */
+  includeRatings?: boolean;
   radiusMeters: number;
   /** Google Places types. Results match any of them. */
   includedTypes: string[];

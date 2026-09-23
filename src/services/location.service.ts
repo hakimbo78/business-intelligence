@@ -26,6 +26,9 @@ const MAX_CENSUS_CALLS = 45;
 /** Below this a tile is smaller than the error in the coordinates. */
 const MIN_TILE_RADIUS_METERS = 120;
 
+/** How many of the nearest competitors get a rating, since the report lists 20. */
+const RATED_COMPETITORS = 20;
+
 export class LocationService {
   private provider = createLocationProvider(env.MAP_PROVIDER);
 
@@ -124,6 +127,14 @@ export class LocationService {
 
     const ordered = [...found.values()].sort((a, b) => a.distance - b.distance);
 
+    // Ratings for the handful the report actually lists.
+    //
+    // One Enterprise search at the tightest radius, rather than putting all
+    // forty-odd census tiles on the Enterprise SKU: the free allowance there is
+    // 1,000 calls a month, so this costs one report's worth instead of a
+    // month's worth.
+    await this.enrichNearestWithRatings(projectId, types, origin, ordered);
+
     const competitors: Competitor[] = [];
     for (const { place, distance } of ordered) {
       competitors.push(
@@ -165,6 +176,50 @@ export class LocationService {
   }
 
   /**
+   * Fetch ratings for the nearest competitors only.
+   *
+   * Failure is silent by design: a missing rating costs the report a column,
+   * and is not worth failing an order over.
+   */
+  private async enrichNearestWithRatings(
+    projectId: string,
+    types: string[],
+    origin: { latitude: number; longitude: number },
+    found: Array<{ place: PlaceSummary; distance: number }>
+  ): Promise<void> {
+    if (found.length === 0) return;
+
+    // Just wide enough to cover the ones the report lists.
+    const radius = Math.max(200, Math.min(found[RATED_COMPETITORS - 1]?.distance ?? 1000, 2000));
+
+    try {
+      const result = await this.provider.searchNearbyPlaces({
+        location: origin,
+        radiusMeters: radius,
+        includedTypes: types.slice(0, 1),
+        maxResults: PAGE_SIZE,
+        rankByDistance: true,
+        projectId,
+        includeRatings: true,
+      });
+
+      const ratings = new Map(
+        result.data.map((p) => [p.placeId, { rating: p.rating, reviewCount: p.reviewCount }])
+      );
+
+      for (const entry of found) {
+        const rating = ratings.get(entry.place.placeId);
+        if (rating) {
+          entry.place.rating = rating.rating;
+          entry.place.reviewCount = rating.reviewCount;
+        }
+      }
+    } catch (error) {
+      logger.warn({ err: error, projectId }, 'Could not enrich competitors with ratings');
+    }
+  }
+
+  /**
    * Search one tile, and split it when the result fills the page.
    *
    * The four child circles overlap deliberately: quadrant centres at 0.7r with
@@ -194,6 +249,10 @@ export class LocationService {
         includedTypes: [type],
         maxResults: PAGE_SIZE,
         rankByDistance: true,
+        projectId,
+        // Ratings would put every tile on the Enterprise SKU, whose free
+        // allowance is a fifth the size. A census counts; it does not rate.
+        includeRatings: false,
       });
 
       places = result.data;
@@ -211,8 +270,15 @@ export class LocationService {
       });
     } catch (error) {
       // A failed tile leaves a hole in the census, so the count becomes a floor
-      // rather than silently reading as "few competitors here".
-      logger.warn({ err: error, projectId, type, depth }, 'Competitor census tile failed');
+      // rather than silently reading as "few competitors here". A budget
+      // ceiling arrives here too, and stopping is exactly what it is for.
+      const budgetStop = (error as Error)?.name === 'BudgetExceededError';
+      logger[budgetStop ? 'warn' : 'warn'](
+        { err: error, projectId, type, depth, budgetStop },
+        budgetStop
+          ? 'Competitor census stopped by the spending ceiling'
+          : 'Competitor census tile failed'
+      );
       state.exhausted = true;
       return;
     }

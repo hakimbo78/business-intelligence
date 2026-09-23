@@ -49,6 +49,20 @@ const envSchema = z.object({
     .optional()
     .transform((v) => v !== 'false'),
 
+  // --- Spending ceilings on paid map APIs (PROJECT_MASTER_SPEC.md §22) ---
+  //
+  // Enforced in code before every billable call. Defaults are deliberately
+  // small: with billing enabled, the cost of a ceiling set too low is a report
+  // that stops and says so, and the cost of one set too high is an invoice.
+  //
+  // These are the LAST line of defence. The first is in the Google Cloud
+  // console: restrict the API key, and set a per-API daily quota there.
+  MAX_PROJECT_API_COST_USD: z.coerce.number().positive().default(3),
+  MAX_DAILY_API_COST_USD: z.coerce.number().positive().default(10),
+  MAX_MONTHLY_API_COST_USD: z.coerce.number().positive().default(50),
+  // Only for showing dollars as rupiah on the cost page; labelled an estimate.
+  USD_TO_IDR: z.coerce.number().positive().default(16_000),
+
   // AI Provider (optional — only required when AI_PROVIDER=gemini or openrouter)
   AI_PROVIDER: z.enum(['mock', 'gemini', 'openrouter']).default('mock'),
   GEMINI_API_KEY: z.string().min(1).optional(),
