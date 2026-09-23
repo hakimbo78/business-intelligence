@@ -35,7 +35,7 @@ export async function locationRoutes(app: FastifyInstance) {
   app.post<{ Body: SearchCompetitorsBody }>('/competitors', async (request, reply) => {
     try {
       const { projectId, category, latitude, longitude, radiusMeters } = request.body;
-      const result = await locationService.searchCompetitorsForProject(projectId, category, latitude, longitude, radiusMeters);
+      const result = await locationService.searchCompetitorsForProject(projectId, [category], latitude, longitude, radiusMeters);
       return reply.status(201).send(result);
     } catch (error) {
       request.log.error({ err: error }, 'Failed to search competitors');

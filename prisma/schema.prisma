@@ -220,6 +220,15 @@ model LocationCandidate {
   /// lacks the rent/size data needed to estimate it.
   estimatedLocationInvestment Float? @map("estimated_location_investment")
 
+  /// How precisely the address was located: ROOFTOP is the building itself,
+  /// while GEOMETRIC_CENTER on a street name is the midpoint of the whole road.
+  /// Kept because every distance in the report is measured from this point, and
+  /// a road-midpoint geocode makes all of them meaningless.
+  geocodePrecision String? @map("geocode_precision")
+  /// The road as the geocoder names it, which is more reliable than parsing the
+  /// address text the client typed.
+  geocodedRoadName String? @map("geocoded_road_name")
+
   status          String   @default("IDENTIFIED") // IDENTIFIED, SHORTLISTED, REJECTED, RECOMMENDED
   confidence      String   @default("LOW") // HIGH, MEDIUM, LOW
   compositeScore  Float?   @map("composite_score")

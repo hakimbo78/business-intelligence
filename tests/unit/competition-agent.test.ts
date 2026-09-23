@@ -37,7 +37,15 @@ vi.mock('@/services/location.service.js', () => ({
       competitors: [
         { name: 'Rival Cafe 1', category: 'cafe' },
         { name: 'Rival Cafe 2', category: 'cafe' }
-      ]
+      ],
+      count: {
+        found: 2,
+        capped: false,
+        radiusMeters: 2000,
+        nearestMeters: 150,
+        searchable: true,
+      },
+      provenance: null,
     }),
   }
 }));
@@ -54,17 +62,24 @@ describe('Competition Agent', () => {
   it('should generate competition analysis', async () => {
     const result = await competitionAgent.analyzeCompetition('mock-project-id');
     
-    // Check mocked response
-    expect(result.densityLevel).toBe('MEDIUM');
+    // The density comes from the competitors actually found, not from the
+    // model: the mock provider returns two, which is a thin market.
+    expect(result.densityLevel).toBe('LOW');
+    expect(result.count?.found).toBe(2);
+    expect(result.count?.searchable).toBe(true);
+
+    // The model still contributes its classification and prose.
     expect(result.directCompetitorsCount).toBe(3);
     
     // Verify project service was called
     expect(projectService.getProject).toHaveBeenCalledWith('mock-project-id');
     
-    // Verify location service was called for competitor discovery
+    // One search covering every category, rather than one call per category:
+    // the categories are resolved to Google types together and de-duplicated.
+    expect(locationService.searchCompetitorsForProject).toHaveBeenCalledTimes(1);
     expect(locationService.searchCompetitorsForProject).toHaveBeenCalledWith(
       'mock-project-id',
-      'cafe',
+      expect.arrayContaining(['cafe']),
       expect.any(Number), // latitude
       expect.any(Number), // longitude
       2000 // radius from research plan

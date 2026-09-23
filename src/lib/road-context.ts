@@ -19,6 +19,66 @@
 
 export type RoadClass = 'MAIN_ROAD' | 'STREET' | 'ALLEY' | 'UNKNOWN';
 
+/**
+ * How badly an imprecise geocode damages the report.
+ *
+ * Every distance in the report — to the nearest school, to each competitor — is
+ * measured from one point. When the client gives a road name without a number,
+ * the geocoder returns the MIDPOINT OF THE ROAD, which on a four-kilometre
+ * Depok street can be two kilometres from the premises. The report then reads
+ * as precise measurement of somewhere the client has never been.
+ *
+ * So this is not a footnote. It is stated at the top of the report and it caps
+ * what the rest of the report is allowed to claim.
+ */
+export type PrecisionLevel = 'EXACT' | 'APPROXIMATE' | 'ROAD_ONLY' | 'UNKNOWN';
+
+export interface GeocodePrecision {
+  level: PrecisionLevel;
+  /** The provider's own word, kept for the audit trail. */
+  raw: string | null;
+  /** What it means for the numbers in this report. */
+  message: string | null;
+}
+
+export function describeGeocodePrecision(raw: string | null | undefined): GeocodePrecision {
+  if (!raw) {
+    return {
+      level: 'UNKNOWN',
+      raw: null,
+      message: null,
+    };
+  }
+
+  const value = raw.toUpperCase();
+
+  if (value === 'ROOFTOP' || value === 'PREMISE' || value === 'SUB_PREMISE') {
+    return { level: 'EXACT', raw, message: null };
+  }
+
+  if (value === 'GEOMETRIC_CENTER' || value === 'ROUTE' || value === 'APPROXIMATE') {
+    return {
+      level: 'ROAD_ONLY',
+      raw,
+      message:
+        'PERINGATAN AKURASI: alamat yang Anda berikan hanya sampai tingkat nama jalan, bukan ' +
+        'nomor bangunan. Titik yang kami analisis adalah TITIK TENGAH JALAN tersebut — pada ' +
+        'jalan sepanjang beberapa kilometer, titik itu bisa berjarak lebih dari satu kilometer ' +
+        'dari properti Anda. Semua jarak di laporan ini (ke sekolah, ke pesaing, ke fasilitas) ' +
+        'diukur dari titik tengah itu, sehingga BISA SANGAT MELESET. Kirim ulang alamat lengkap ' +
+        'dengan nomor, atau titik koordinat dari Google Maps, untuk mendapat hasil yang akurat.',
+    };
+  }
+
+  return {
+    level: 'APPROXIMATE',
+    raw,
+    message:
+      `Titik properti hanya dapat ditemukan pada tingkat presisi "${raw}", bukan bangunan ` +
+      'persis. Jarak-jarak di laporan ini bisa meleset beberapa puluh meter.',
+  };
+}
+
 export const ROAD_CLASS_LABEL: Record<RoadClass, string> = {
   MAIN_ROAD: 'Kemungkinan jalan utama',
   STREET: 'Jalan lingkungan',
@@ -122,11 +182,9 @@ export function describeRoad(input: {
     );
   }
 
-  if (input.addressPrecision && input.addressPrecision !== 'ROOFTOP') {
-    notes.push(
-      `Titik koordinat properti hanya presisi tingkat "${input.addressPrecision}", bukan ` +
-        'bangunan persis. Jarak-jarak di laporan ini bisa meleset beberapa puluh meter.'
-    );
+  const precision = describeGeocodePrecision(input.addressPrecision);
+  if (precision.message) {
+    notes.push(precision.message);
   }
 
   return {

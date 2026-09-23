@@ -2,6 +2,7 @@ import { env } from '../../config/environment.js';
 import {
   LocationProvider,
   SearchPlacesParams,
+  SearchNearbyParams,
   GetPlaceDetailsParams,
   GeocodeParams,
   CalculateRouteParams,
@@ -34,6 +35,7 @@ import { describeGoogleMapsFailure, LocationProviderError } from './location-pro
 
 const GEOCODE_URL = 'https://geocode.googleapis.com/v4/geocode/address';
 const PLACES_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
+const PLACES_NEARBY_URL = 'https://places.googleapis.com/v1/places:searchNearby';
 const PLACE_DETAILS_URL = 'https://places.googleapis.com/v1/places';
 const ROUTES_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
 
@@ -228,6 +230,52 @@ export class GoogleMapsProvider implements LocationProvider {
     }));
 
     return { data: places, provenance: this.provenance('search_places') };
+  }
+
+  async searchNearbyPlaces(params: SearchNearbyParams): Promise<ProviderResult<PlaceSummary[]>> {
+    const body = await this.request<{ places?: PlaceResource[] }>(
+      PLACES_NEARBY_URL,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': this.key,
+          'X-Goog-FieldMask': PLACE_SUMMARY_FIELDS,
+        },
+        body: JSON.stringify({
+          includedTypes: params.includedTypes,
+          maxResultCount: Math.min(params.maxResults ?? 20, 20),
+          ...(params.rankByDistance ? { rankPreference: 'DISTANCE' } : {}),
+          // A restriction, not a bias: a competitor outside the radius is not a
+          // competitor, and bias lets one in from the next city.
+          locationRestriction: {
+            circle: {
+              center: {
+                latitude: params.location.latitude,
+                longitude: params.location.longitude,
+              },
+              radius: params.radiusMeters,
+            },
+          },
+        }),
+      },
+      'searchNearbyPlaces'
+    );
+
+    const places: PlaceSummary[] = (body.places ?? []).map((p) => ({
+      placeId: p.id ?? '',
+      name: p.displayName?.text ?? '',
+      address: p.formattedAddress ?? '',
+      location: {
+        latitude: p.location?.latitude ?? 0,
+        longitude: p.location?.longitude ?? 0,
+      },
+      category: p.primaryType ?? 'unknown',
+      rating: p.rating,
+      reviewCount: p.userRatingCount,
+    }));
+
+    return { data: places, provenance: this.provenance('search_nearby') };
   }
 
   async getPlaceDetails(params: GetPlaceDetailsParams): Promise<ProviderResult<PlaceDetails>> {

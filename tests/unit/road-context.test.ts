@@ -81,7 +81,7 @@ describe('Road classification', () => {
       nearbyAddresses: [],
     });
 
-    expect(road.notes.join(' ')).toContain('bukan bangunan persis');
+    expect(road.notes.join(' ')).toContain('TITIK TENGAH JALAN');
   });
 
   it('should say nothing rather than guess when the road is unknown', () => {

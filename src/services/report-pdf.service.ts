@@ -101,6 +101,44 @@ function locationContextSection(report: StructuredReport): string {
 
 
 /**
+ * A score is a traffic light, so it must not be green while the report says the
+ * business loses money. Previously the box was hardcoded green at every value.
+ */
+function scoreColour(score: unknown): string {
+  const value = typeof score === 'number' ? score : -1;
+  if (value < 0) return '#7f8c8d';
+  if (value >= 70) return '#27ae60';
+  if (value >= 45) return '#f39c12';
+  return '#e74c3c';
+}
+
+/**
+ * The accuracy warning, at the top where it belongs.
+ *
+ * When the client gives a road without a number, every distance in the report
+ * is measured from the midpoint of that road. Burying that in a later section
+ * lets the reader take the earlier numbers at face value.
+ */
+function precisionBanner(report: StructuredReport): string {
+  const message = report.precision?.message;
+  if (!message) return '';
+
+  return `<div class="alert">${esc(message)}</div>`;
+}
+
+/** Why the overall score was held below what the dimensions averaged to. */
+function capsSection(report: StructuredReport): string {
+  const caps: string[] = (report.analysis as any)?.scoring?.caps ?? [];
+  if (caps.length === 0) return '';
+
+  return `
+      <div class="alert">
+        <strong>Mengapa skor ini dibatasi:</strong>
+        <ul>${caps.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+      </div>`;
+}
+
+/**
  * An image with its caption.
  *
  * The caption is not decoration. A photograph is the most persuasive thing in
@@ -243,10 +281,21 @@ function sensitivitySection(report: StructuredReport): string {
 
   const rows = s.points
     .map((p: any) => {
-      const highlight = p.isAssumption ? ' style="background:#eaf4fb;font-weight:bold"' : '';
+      // The threshold row is the one the customer has to act on, so it is
+      // marked as clearly as their own estimate.
+      const highlight = p.isAssumption
+        ? ' style="background:#eaf4fb;font-weight:bold"'
+        : p.isBreakEven
+          ? ' style="background:#fff4e0;font-weight:bold"'
+          : '';
+      const marker = p.isAssumption
+        ? ' &larr; perkiraan Anda'
+        : p.isBreakEven
+          ? ' &larr; TITIK IMPAS'
+          : '';
       return `
             <tr${highlight}>
-              <td>${p.customersPerDay}${p.isAssumption ? ' &larr; perkiraan Anda' : ''}</td>
+              <td>${p.customersPerDay}${marker}</td>
               <td>${money(p.monthlyRevenue)}</td>
               <td style="color:${p.operatingProfit >= 0 ? '#27ae60' : '#e74c3c'}">${money(p.operatingProfit)}</td>
               <td>${p.paybackPeriodMonths === null ? 'Tidak balik modal' : `${p.paybackPeriodMonths} bulan`}</td>
@@ -286,7 +335,8 @@ function sensitivitySection(report: StructuredReport): string {
 
       <p class="note">
         Tabel berikut menunjukkan apa yang terjadi jika jumlah pelanggan berbeda dari
-        perkiraan Anda. Baris bertanda adalah perkiraan yang Anda berikan.
+        perkiraan Anda. Baris biru adalah perkiraan yang Anda berikan; baris oranye adalah
+        titik impas — jumlah pelanggan minimum agar tidak rugi.
       </p>
       <table>
         <thead>
@@ -313,6 +363,7 @@ function sensitivitySection(report: StructuredReport): string {
  */
 function competitorSection(report: StructuredReport): string {
   const competitors = report.competitors ?? [];
+  const countExplanation = (report.analysis as any)?.competition?.countExplanation ?? null;
   if (competitors.length === 0) {
     return `
       <h2>10. Pesaing di Sekitar Lokasi</h2>
@@ -334,8 +385,13 @@ function competitorSection(report: StructuredReport): string {
 
   return `
       <h2>10. Pesaing di Sekitar Lokasi</h2>
+      ${
+        countExplanation
+          ? `<div class="panel"><strong>Hasil pengukuran:</strong> ${esc(countExplanation)}</div>`
+          : ''
+      }
       <p class="note">
-        ${competitors.length} pesaing terdekat, diurutkan dari yang paling dekat.
+        ${competitors.length} pesaing terdekat yang ditampilkan, diurutkan dari yang paling dekat.
         Jumlah ulasan menunjukkan seberapa ramai sebuah tempat — bukan ukuran mutlak,
         tetapi dapat Anda periksa sendiri di lapangan.
       </p>
@@ -438,7 +494,8 @@ export function renderReportHtml(report: StructuredReport): string {
         table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
         th { background-color: #f2f2f2; }
-        .score-box { display: inline-block; padding: 10px 20px; background: #27ae60; color: white; font-size: 24px; font-weight: bold; border-radius: 8px; text-align: center; }
+        .score-box { display: inline-block; padding: 10px 20px; color: white; font-size: 24px; font-weight: bold; border-radius: 8px; text-align: center; }
+        .alert { padding: 15px; background: #fdf3f2; border-radius: 8px; border-left: 4px solid #e74c3c; margin: 20px 0; font-size: 14px; color: #922b21; }
         figure { margin: 15px 0; }
         figure img { width: 100%; border: 1px solid #ddd; border-radius: 8px; display: block; }
         figcaption { font-size: 12px; color: #7f8c8d; margin-top: 6px; }
@@ -447,6 +504,7 @@ export function renderReportHtml(report: StructuredReport): string {
     </head>
     <body>
       <h1>Laporan Intelijen Lokasi</h1>
+      ${precisionBanner(report)}
 
       <div class="meta">
         <div><strong>Proyek:</strong> ${esc(meta?.projectName)}</div>
@@ -454,10 +512,14 @@ export function renderReportHtml(report: StructuredReport): string {
         <div><strong>Area Target:</strong> ${esc(meta?.targetArea)}</div>
         <div>
           <strong>Skor Keseluruhan:</strong>
-          <div class="score-box">${esc(analysis.scoring?.overallScore)} / 100</div>
+          <div class="score-box" style="background:${scoreColour(analysis.scoring?.overallScore)}">
+            ${esc(analysis.scoring?.overallScore)} / 100
+          </div>
         </div>
         <div><strong>Dibuat:</strong> ${esc(meta?.generatedAt)}</div>
       </div>
+
+      ${capsSection(report)}
 
       <h2>1. Ringkasan Eksekutif</h2>
       <div class="panel">${esc(synthesis?.executiveSummary)}</div>

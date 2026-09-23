@@ -44,4 +44,5 @@ temp/
 # Generated report artefacts
 latest-report.json
 latest-report.pdf
+laporan-*.pdf
 *.report.json

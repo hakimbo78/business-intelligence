@@ -5,7 +5,12 @@ import { logger } from '../lib/logger.js';
 import { prisma } from '../config/database.js';
 import { REPORT_DISCLAIMER_EN } from '../lib/disclaimer.js';
 import { summariseLocationCost, type LocationCostSummary } from '../lib/location-cost.js';
-import { describeRoad, type RoadContext } from '../lib/road-context.js';
+import {
+  describeRoad,
+  describeGeocodePrecision,
+  type GeocodePrecision,
+  type RoadContext,
+} from '../lib/road-context.js';
 import { imageryService } from '../services/imagery.service.js';
 import type { LocationImagery } from '../lib/imagery.js';
 
@@ -73,6 +78,14 @@ export interface StructuredReport {
    * one down a gang are different businesses.
    */
   road: RoadContext | null;
+  /**
+   * How precisely the premises could be located.
+   *
+   * Carried at the top level rather than inside the road section, because a
+   * road-midpoint geocode invalidates every distance in the report, not just
+   * the road reading.
+   */
+  precision: GeocodePrecision | null;
   /**
    * A photograph of the frontage and a map with the competitors pinned.
    *
@@ -247,15 +260,20 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
     // Road context costs nothing extra: it reads the road name already returned
     // when the premises was geocoded, and the competitor addresses already held.
     const assessed = project.candidates.length === 1 ? project.candidates[0] : null;
+    // The geocoder's own road name beats parsing the free text the client
+    // typed: "Jl. Tole iskandar depok 2" parses to a road that does not exist,
+    // while the geocoder returns "Jalan Tole Iskandar".
     const road = assessed
       ? describeRoad({
-          roadName: extractRoadName(assessed.address),
-          addressPrecision: null,
+          roadName: assessed.geocodedRoadName ?? extractRoadName(assessed.address),
+          addressPrecision: assessed.geocodePrecision,
           nearbyAddresses: project.competitors
             .map((c) => c.address)
             .filter((a): a is string => Boolean(a)),
         })
       : null;
+
+    const precision = assessed ? describeGeocodePrecision(assessed.geocodePrecision) : null;
     // Billed Google products, so only for a single assessed premises, and only
     // once — the result is stored in the report and reused by every later PDF.
     const imagery = assessed
@@ -288,6 +306,7 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       disclaimer: REPORT_DISCLAIMER_EN,
       premises,
       road,
+      precision,
       imagery,
       synthesis,
       candidates: {

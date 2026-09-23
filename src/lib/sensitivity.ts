@@ -22,6 +22,8 @@ export interface SensitivityPoint {
   isViable: boolean;
   /** True for the row matching the customer's own estimate. */
   isAssumption: boolean;
+  /** True for the row at the break-even threshold. */
+  isBreakEven: boolean;
 }
 
 export interface SensitivityAnalysis {
@@ -57,7 +59,10 @@ export function breakEvenCustomersPerDay(inputs: FinancialInputs): number {
   return Math.ceil(fixedCosts / contributionPerCustomerPerMonth);
 }
 
-function evaluate(inputs: FinancialInputs, customersPerDay: number): Omit<SensitivityPoint, 'isAssumption'> {
+function evaluate(
+  inputs: FinancialInputs,
+  customersPerDay: number
+): Omit<SensitivityPoint, 'isAssumption' | 'isBreakEven'> {
   const monthlyRevenue = customersPerDay * inputs.averageTransaction * inputs.operatingDays;
   const grossProfit = monthlyRevenue * inputs.grossMargin;
   const operatingProfit = grossProfit - inputs.rent - inputs.operatingCostMonthly;
@@ -90,9 +95,18 @@ export function analyseSensitivity(inputs: FinancialInputs): SensitivityAnalysis
   );
   counts.add(assumed);
 
+  // The threshold is the point of the table, and it was missing from it: with
+  // an estimate of 20 the rows ran 8 to 28 while break-even sat at 33, so the
+  // one number the customer had to clear never appeared.
+  if (breakEven > 0) counts.add(breakEven);
+
   const points: SensitivityPoint[] = [...counts]
     .sort((a, b) => a - b)
-    .map((c) => ({ ...evaluate(inputs, c), isAssumption: c === assumed }));
+    .map((c) => ({
+      ...evaluate(inputs, c),
+      isAssumption: c === assumed,
+      isBreakEven: c === breakEven,
+    }));
 
   const notes: string[] = [];
 

@@ -49,7 +49,8 @@ describe('Scoring Calculator', () => {
     const result = calculateScores(fullInputs);
     const demand = result.dimensions.find(d => d.dimension === 'demand');
     expect(demand?.score).toBe(85);
-    expect(demand?.evidence).toContain('STRONG');
+    // The report is Indonesian, so the evidence is too.
+    expect(demand?.evidence).toContain('kuat');
   });
 
   it('should score competition as 55 for MEDIUM density', () => {

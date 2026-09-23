@@ -8,6 +8,10 @@ export interface CreateCandidateInput {
   latitude: number;
   longitude: number;
   placeId?: string;
+  /** How precisely the address was located, when it was geocoded. */
+  geocodePrecision?: string | null;
+  /** The road as the geocoder names it. */
+  geocodedRoadName?: string | null;
 }
 
 export interface CreateCompetitorInput {
@@ -37,6 +41,8 @@ export class CandidateRepository {
         latitude: input.latitude,
         longitude: input.longitude,
         placeId: input.placeId,
+        geocodePrecision: input.geocodePrecision ?? null,
+        geocodedRoadName: input.geocodedRoadName ?? null,
       },
     });
 

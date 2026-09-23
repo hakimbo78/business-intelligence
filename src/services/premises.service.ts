@@ -69,11 +69,19 @@ export class PremisesService {
     let latitude = input.latitude;
     let longitude = input.longitude;
     let coordinatesGeocoded = false;
+    // Kept, because every distance in the report is measured from this point.
+    // "Jl. Tole Iskandar, Depok" geocodes to the midpoint of a four-kilometre
+    // road, and a report that does not say so presents distances from a place
+    // the client has never been to.
+    let geocodePrecision: string | null = null;
+    let geocodedRoadName: string | null = null;
 
     if (latitude === undefined || longitude === undefined) {
       const geocoded = await this.locationProvider.geocode({ address: input.address });
       latitude = geocoded.data.location.latitude;
       longitude = geocoded.data.location.longitude;
+      geocodePrecision = geocoded.data.precision ?? null;
+      geocodedRoadName = geocoded.data.roadName ?? null;
       coordinatesGeocoded = true;
 
       await dataSourceRepository.record(geocoded.provenance, {
@@ -105,6 +113,8 @@ export class PremisesService {
         propertySize: normalized.sizeSqm ?? null,
         propertyType: normalized.propertyType ?? null,
         propertyListingId: listing.id,
+        geocodePrecision,
+        geocodedRoadName,
         // The client supplied these figures; they are still unverified on site
         // until someone confirms them (§17).
         confidence: normalized.confidence,

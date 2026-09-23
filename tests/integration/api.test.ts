@@ -139,7 +139,11 @@ describe('API Integration Tests', () => {
     });
 
     expect(dbProject?.candidates.length).toBe(2);
-    expect(dbProject?.candidates[0].name).toBe('Janji Jiwa Kemang');
+    // The query has no ordering, so assert on the set rather than the first row.
+    expect(dbProject?.candidates.map((c) => c.name).sort()).toEqual([
+      'Janji Jiwa Kemang',
+      'Kopi Kenangan Kemang',
+    ]);
   });
   it('POST /api/projects/:id/research-plan - should generate research plan', async () => {
     const response = await app.inject({
@@ -176,8 +180,10 @@ describe('API Integration Tests', () => {
     expect(response.statusCode).toBe(201);
     const data = JSON.parse(response.payload);
     
-    // Check analysis format (mocked in AI provider)
-    expect(data.densityLevel).toBe('MEDIUM');
+    // Density is measured from the competitors found, so it overrides whatever
+    // the AI provider returned.
+    expect(data.densityLevel).toBe('LOW');
+    expect(data.countExplanation).toContain('tidak terdaftar tidak terhitung');
     expect(data.directCompetitorsCount).toBe(3);
 
     // Verify it was saved to the DB
@@ -186,7 +192,7 @@ describe('API Integration Tests', () => {
     });
 
     expect(dbProject?.competitionAnalysis).toBeDefined();
-    expect((dbProject?.competitionAnalysis as any).densityLevel).toBe('MEDIUM');
+    expect((dbProject?.competitionAnalysis as any).densityLevel).toBe('LOW');
   });
 
   it('POST /api/projects/:id/demand-analysis - should generate demand analysis', async () => {

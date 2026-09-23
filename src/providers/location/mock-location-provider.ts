@@ -1,6 +1,7 @@
 import {
   LocationProvider,
   SearchPlacesParams,
+  SearchNearbyParams,
   GetPlaceDetailsParams,
   GeocodeParams,
   CalculateRouteParams,
@@ -69,6 +70,18 @@ export class MockLocationProvider implements LocationProvider {
         confidence: 'HIGH',
       },
     };
+  }
+
+  async searchNearbyPlaces(params: SearchNearbyParams): Promise<ProviderResult<PlaceSummary[]>> {
+    const result = await this.searchPlaces({
+      query: params.includedTypes[0] ?? 'place',
+      location: params.location,
+      radiusMeters: params.radiusMeters,
+      type: params.includedTypes[0],
+      maxResults: params.maxResults,
+    });
+
+    return { ...result, provenance: { ...result.provenance, dataType: 'search_nearby' } };
   }
 
   async getPlaceDetails(params: GetPlaceDetailsParams): Promise<ProviderResult<PlaceDetails>> {

@@ -105,6 +105,21 @@ export interface SearchPlacesParams {
   maxResults?: number;
 }
 
+export interface SearchNearbyParams {
+  location: Coordinates;
+  radiusMeters: number;
+  /** Google Places types. Results match any of them. */
+  includedTypes: string[];
+  maxResults?: number;
+  /**
+   * Return the closest first rather than the most "prominent".
+   *
+   * Relevance ranking answers a different question: asked for supermarkets near
+   * a Depok street it offers one 11 km away because it is a bigger name.
+   */
+  rankByDistance?: boolean;
+}
+
 export interface GetPlaceDetailsParams {
   placeId: string;
   /** Field mask to minimize API cost (per MASTER_SPEC §22) */
@@ -154,6 +169,15 @@ export interface LocationProvider {
    * Maps to: Google Places API (Text Search / Nearby Search)
    */
   searchPlaces(params: SearchPlacesParams): Promise<ProviderResult<PlaceSummary[]>>;
+
+  /**
+   * Find places of given types around a point, nearest first.
+   *
+   * Distinct from `searchPlaces`, which matches free text: counting the
+   * competitors around a premises needs a type filter and distance ordering,
+   * and a text search gives neither reliably.
+   */
+  searchNearbyPlaces(params: SearchNearbyParams): Promise<ProviderResult<PlaceSummary[]>>;
 
   /**
    * Get detailed information about a specific place.
