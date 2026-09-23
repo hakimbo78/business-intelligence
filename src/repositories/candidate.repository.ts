@@ -85,6 +85,9 @@ export class CandidateRepository {
         distanceMeters: input.distanceMeters,
         rating: input.rating,
         reviewCount: input.reviewCount,
+        // Stamped so the retention sweep can expire provider content without
+        // guessing its age (see provider-retention.service.ts).
+        contentFetchedAt: new Date(),
       },
     });
 

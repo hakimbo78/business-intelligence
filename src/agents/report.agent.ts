@@ -23,6 +23,9 @@ import {
   type OccupancyAssessment,
 } from '../lib/trade-profile.js';
 import { assessMarketShare, type MarketShareRequirement } from '../lib/market-share.js';
+import { decideVerdict, type DecisionVerdict } from '../lib/decision-verdict.js';
+import { reachabilityService } from '../services/reachability.service.js';
+import type { Reachability } from '../lib/isochrone.js';
 import type { LocationImagery } from '../lib/imagery.js';
 
 /**
@@ -108,10 +111,24 @@ export interface StructuredReport {
   } | null;
   /** Residents around the premises, from WorldPop. */
   population: PopulationContext | null;
+  /**
+   * How much of that catchment the road network actually serves.
+   *
+   * A circle counts people across the river; this measures the ones who can
+   * get here along a road. Null when the network could not be read.
+   */
+  reachability: Reachability | null;
   /** The share of the local market this business must win to break even. */
   marketShare: MarketShareRequirement | null;
   /** Whether the rent is survivable for this trade. */
   occupancy: OccupancyAssessment | null;
+  /**
+   * Whether this location is worth the cost of a field survey.
+   *
+   * The narrowest decision the evidence can actually settle, and the line the
+   * client acts on. A score leaves the reader to interpret it; this does not.
+   */
+  decision: DecisionVerdict | null;
   /** Sources that require attribution by licence. */
   attributions: string[];
   /**
@@ -347,6 +364,10 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       ? await populationService.describe(premisesPoint, profile.catchmentRadiusMeters, projectId)
       : null;
 
+    const reachability = premisesPoint
+      ? await reachabilityService.measure(premisesPoint, profile.catchmentRadiusMeters, projectId)
+      : null;
+
     const sensitivity = (project.financialAnalysis as any)?.sensitivity;
     const competitionCount = (project.competitionAnalysis as any)?.count;
 
@@ -355,6 +376,7 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
         ? assessMarketShare({
             profile,
             catchmentPopulation: population.catchmentPopulation,
+            reachableFraction: reachability?.fraction ?? null,
             competitorCount: competitionCount?.found ?? project.competitors.length,
             competitorCountIsMinimum: competitionCount?.capped ?? false,
             breakEvenCustomersPerDay: sensitivity.breakEvenCustomersPerDay,
@@ -373,6 +395,19 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       : null;
 
     const occupancy = premises ? assessOccupancy(premises.cost.occupancyCostRatio, profile) : null;
+
+    // The verdict reads the measurements; it never asks the model.
+    const decision = decideVerdict({
+      baseIsViable:
+        (project.financialAnalysis as any)?.scenarios?.find((s: any) => s.scenarioName === 'BASE')
+          ?.isViable ?? null,
+      occupancy,
+      marketShare,
+      precisionLevel: precision?.level ?? null,
+      quotedRent: assessed?.estimatedRent ?? null,
+      maxAffordableRent: sensitivity?.maxAffordableRent ?? null,
+      competitorCountIsMinimum: competitionCount?.capped ?? false,
+    });
 
     const attributions = [
       ...(osmRoad ? [OSM_ATTRIBUTION] : []),
@@ -398,8 +433,10 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
         notes: describeTradeProfile(profile),
       },
       population,
+      reachability,
       marketShare,
       occupancy,
+      decision,
       attributions,
       precision,
       imagery,

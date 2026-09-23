@@ -6,6 +6,7 @@ import { logger } from '../lib/logger.js';
 import { LocationCandidate, Competitor } from '@prisma/client';
 import { DataProvenance } from '../providers/location/location-provider.interface.js';
 import { resolveCompetitorTypes, type CompetitionCount } from '../lib/competitor-types.js';
+import { providerRetentionService } from './provider-retention.service.js';
 import type { PlaceSummary } from '../providers/location/location-provider.interface.js';
 import { distanceMeters } from '../lib/location-context.js';
 
@@ -82,6 +83,10 @@ export class LocationService {
     longitude: number,
     radiusMeters: number
   ): Promise<{ competitors: Competitor[]; count: CompetitionCount; provenance: DataProvenance | null }> {
+    // Expire stale provider content before writing new rows, so the sweep runs
+    // on the same schedule as the work that creates the obligation.
+    await providerRetentionService.sweep();
+
     const types = resolveCompetitorTypes(categories);
     const origin = { latitude, longitude };
 

@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer';
 import { REPORT_DISCLAIMER_ID } from '../lib/disclaimer.js';
 import { OSM_ROAD_CLASS_LABEL } from '../lib/osm-road.js';
+import { VERDICT_LABEL, VERDICT_HEADLINE, VERDICT_COLOUR } from '../lib/decision-verdict.js';
 import { ROAD_CLASS_LABEL } from '../lib/road-context.js';
 import type { StructuredReport } from '../agents/report.agent.js';
 import { logger } from '../lib/logger.js';
@@ -147,6 +148,39 @@ function capsSection(report: StructuredReport): string {
 }
 
 /**
+ * The decision, before anything else on the page.
+ *
+ * Everything below it is the working. A reader who stops after this box should
+ * still have the one thing they came for, and the conditions are part of it —
+ * a verdict the reader cannot act on is only a judgement.
+ */
+function verdictSection(report: StructuredReport): string {
+  const decision = report.decision;
+  if (!decision) return '';
+
+  const colour = VERDICT_COLOUR[decision.verdict];
+
+  return `
+      <div class="verdict" style="border-color:${colour}">
+        <div class="verdict-label" style="color:${colour}">${esc(VERDICT_LABEL[decision.verdict])}</div>
+        <p style="margin:6px 0 0">${esc(VERDICT_HEADLINE[decision.verdict])}</p>
+        ${
+          decision.reasons.length > 0
+            ? `<p style="margin:14px 0 4px"><strong>Dasarnya:</strong></p>
+               <ul style="margin:0">${decision.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`
+            : ''
+        }
+        ${
+          decision.conditions.length > 0
+            ? `<p style="margin:14px 0 4px"><strong>Yang harus dipenuhi lebih dulu:</strong></p>
+               <ul style="margin:0">${decision.conditions.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>`
+            : ''
+        }
+        <p style="margin:14px 0 0"><strong>Langkah berikutnya:</strong> ${esc(decision.nextStep)}</p>
+      </div>`;
+}
+
+/**
  * Where this report's assumptions come from.
  *
  * The catchment radius, the healthy rent band and the visit rate are retail
@@ -224,6 +258,19 @@ function marketShareSection(report: StructuredReport): string {
       <h2>5. Pangsa Pasar yang Harus Anda Rebut</h2>
       <div class="panel">
         <table style="margin-top:0">
+          ${
+            share.reachableFraction !== null && share.reachableFraction < 0.98
+              ? row(
+                  'Bagian jangkauan yang benar-benar tercapai lewat jalan',
+                  `${Math.round(share.reachableFraction * 100)}% dari lingkaran radius ${share.catchmentRadiusMeters} m`
+                )
+              : ''
+          }
+          ${
+            share.reachablePopulation !== null
+              ? row('Penduduk dalam jangkauan', `${share.reachablePopulation.toLocaleString('id-ID')} jiwa`)
+              : ''
+          }
           ${row(
             'Perkiraan pasar di sekitar lokasi',
             share.potentialTransactionsPerMonth === null
@@ -701,6 +748,8 @@ export function renderReportHtml(report: StructuredReport): string {
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
         th { background-color: #f2f2f2; }
         .score-box { display: inline-block; padding: 10px 20px; color: white; font-size: 24px; font-weight: bold; border-radius: 8px; text-align: center; }
+        .verdict { border: 3px solid #7f8c8d; border-radius: 10px; padding: 20px; margin: 25px 0; font-size: 14px; }
+        .verdict-label { font-size: 26px; font-weight: bold; letter-spacing: 0.5px; }
         .alert { padding: 15px; background: #fdf3f2; border-radius: 8px; border-left: 4px solid #e74c3c; margin: 20px 0; font-size: 14px; color: #922b21; }
         figure { margin: 15px 0; }
         figure img { width: 100%; border: 1px solid #ddd; border-radius: 8px; display: block; }
@@ -724,6 +773,8 @@ export function renderReportHtml(report: StructuredReport): string {
         </div>
         <div><strong>Dibuat:</strong> ${esc(meta?.generatedAt)}</div>
       </div>
+
+      ${verdictSection(report)}
 
       ${capsSection(report)}
 

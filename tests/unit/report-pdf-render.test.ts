@@ -405,3 +405,38 @@ describe('Defects the Bella Casa report exposed', () => {
     expect(html).toContain('OpenStreetMap');
   });
 });
+
+describe('The decision, before the working', () => {
+  it('should lead with the verdict and its conditions', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      decision: {
+        verdict: 'INVESTIGATE',
+        reasons: ['Pada perkiraan pelanggan Anda sendiri, skenario dasar sudah rugi.'],
+        conditions: ['Tawar sewa turun ke Rp 4.875.000 per bulan atau kurang.'],
+        nextStep: 'Penuhi syarat di atas lebih dulu.',
+      },
+    } as never);
+
+    expect(html).toContain('PERLU DIPERBAIKI DULU');
+    expect(html).toContain('Yang harus dipenuhi lebih dulu');
+    expect(html).toContain('Rp 4.875.000');
+
+    // The decision must come before the executive summary, not after it.
+    expect(html.indexOf('PERLU DIPERBAIKI DULU')).toBeLessThan(html.indexOf('Ringkasan Eksekutif'));
+  });
+
+  it('should say plainly when a location is worth the trip', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      decision: { verdict: 'VALIDATE', reasons: [], conditions: [], nextStep: 'Lanjutkan ke daftar periksa.' },
+    } as never);
+
+    expect(html).toContain('LAYAK DISURVEI');
+  });
+
+  it('should render nothing rather than an empty box when there is no verdict', () => {
+    const html = renderReportHtml({ ...(base as object) } as never);
+    expect(html).not.toContain('class="verdict"');
+  });
+});

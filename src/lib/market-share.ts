@@ -21,8 +21,17 @@ import type { TradeProfile } from './trade-profile.js';
 
 export interface MarketShareRequirement {
   catchmentRadiusMeters: number;
-  /** Residents inside the catchment. Null when population is unavailable. */
+  /** Residents inside the catchment circle. Null when unavailable. */
   catchmentPopulation: number | null;
+  /**
+   * Share of that circle the road network actually serves.
+   *
+   * Null when the network could not be read, in which case the circle is used
+   * whole and the notes say so.
+   */
+  reachableFraction: number | null;
+  /** Residents actually within reach along roads. The figure the market uses. */
+  reachablePopulation: number | null;
   competitorCount: number;
   /** True when the census could not be completed, so the count is a floor. */
   competitorCountIsMinimum: boolean;
@@ -42,6 +51,8 @@ export interface MarketShareRequirement {
 export function assessMarketShare(input: {
   profile: TradeProfile;
   catchmentPopulation: number | null;
+  /** From the road network, when it could be read. */
+  reachableFraction?: number | null;
   competitorCount: number;
   competitorCountIsMinimum: boolean;
   breakEvenCustomersPerDay: number;
@@ -53,10 +64,22 @@ export function assessMarketShare(input: {
     input.breakEvenCustomersPerDay * input.operatingDays
   );
 
-  const potentialTransactionsPerMonth =
+  // Only ever cuts the market down: a network that cannot be read leaves the
+  // circle whole rather than inflating it.
+  const reachableFraction =
+    input.reachableFraction !== null && input.reachableFraction !== undefined
+      ? Math.min(1, Math.max(0, input.reachableFraction))
+      : null;
+
+  const reachablePopulation =
     input.catchmentPopulation === null
       ? null
-      : Math.round(input.catchmentPopulation * profile.visitsPerResidentPerMonth);
+      : Math.round(input.catchmentPopulation * (reachableFraction ?? 1));
+
+  const potentialTransactionsPerMonth =
+    reachablePopulation === null
+      ? null
+      : Math.round(reachablePopulation * profile.visitsPerResidentPerMonth);
 
   const requiredSharePercent =
     potentialTransactionsPerMonth === null || potentialTransactionsPerMonth <= 0
@@ -82,11 +105,33 @@ export function assessMarketShare(input: {
         'ukuran pasar dan pangsa yang dibutuhkan tidak dapat dihitung.'
     );
   } else {
+    const km = (profile.catchmentRadiusMeters / 1000).toFixed(1).replace('.', ',');
+
+    if (reachableFraction !== null && reachableFraction < 0.98) {
+      notes.push(
+        `Dalam radius ${km} km ada ${input.catchmentPopulation.toLocaleString('id-ID')} penduduk, ` +
+          `tetapi hanya ${Math.round(reachableFraction * 100)}% dari area itu yang benar-benar ` +
+          `terjangkau lewat jalan — sekitar ${reachablePopulation!.toLocaleString('id-ID')} orang. ` +
+          'Angka yang lebih kecil itulah yang dipakai menghitung pasar.'
+      );
+    } else {
+      notes.push(
+        `Ukuran pasar dihitung dari ${reachablePopulation!.toLocaleString('id-ID')} penduduk ` +
+          `dalam jangkauan ${km} km.`
+      );
+    }
+
     notes.push(
-      `Ukuran pasar dihitung dari ${input.catchmentPopulation.toLocaleString('id-ID')} penduduk ` +
-        `dalam radius ${(profile.catchmentRadiusMeters / 1000).toFixed(1).replace('.', ',')} km, ` +
-        `dikali asumsi ${profile.visitsPerResidentPerMonth} ${profile.transactionNoun} per orang ` +
-        'per bulan. Angka frekuensi itu kaidah umum, bukan pengukuran di lokasi Anda.'
+      `Jumlah penduduk itu dikali asumsi ${profile.visitsPerResidentPerMonth} ` +
+        `${profile.transactionNoun} per orang per bulan. Angka frekuensi itu kaidah umum, ` +
+        'bukan pengukuran di lokasi Anda.'
+    );
+  }
+
+  if (reachableFraction === null && input.catchmentPopulation !== null) {
+    notes.push(
+      'Jaringan jalan tidak dapat dibaca, sehingga jangkauan dihitung sebagai lingkaran garis ' +
+        'lurus. Jumlah penduduk yang benar-benar dapat mencapai lokasi ini kemungkinan lebih kecil.'
     );
   }
 
@@ -127,6 +172,8 @@ export function assessMarketShare(input: {
   return {
     catchmentRadiusMeters: profile.catchmentRadiusMeters,
     catchmentPopulation: input.catchmentPopulation,
+    reachableFraction,
+    reachablePopulation,
     competitorCount: input.competitorCount,
     competitorCountIsMinimum: input.competitorCountIsMinimum,
     potentialTransactionsPerMonth,

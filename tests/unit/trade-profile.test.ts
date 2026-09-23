@@ -129,3 +129,40 @@ describe('The share of the neighbourhood this business must win', () => {
     expect(result.notes.join(' ')).toContain('bukan pengukuran di lokasi Anda');
   });
 });
+
+describe('Only the reachable part of the catchment counts', () => {
+  const laundry = resolveTradeProfile(['laundry']);
+
+  const input = {
+    profile: laundry,
+    catchmentPopulation: 31_628,
+    competitorCount: 89,
+    competitorCountIsMinimum: false,
+    breakEvenCustomersPerDay: 25,
+    operatingDays: 26,
+  };
+
+  it('should shrink the market to what the roads actually serve', () => {
+    const whole = assessMarketShare(input);
+    const cut = assessMarketShare({ ...input, reachableFraction: 0.6 });
+
+    expect(cut.reachablePopulation).toBe(18_977);
+    expect(cut.potentialTransactionsPerMonth).toBeLessThan(whole.potentialTransactionsPerMonth!);
+    // A smaller market means a bigger share has to be won.
+    expect(cut.requiredSharePercent!).toBeGreaterThan(whole.requiredSharePercent!);
+    expect(cut.notes.join(' ')).toContain('60% dari area itu');
+  });
+
+  it('should never let reachability inflate the market', () => {
+    const inflated = assessMarketShare({ ...input, reachableFraction: 1.8 });
+    expect(inflated.reachablePopulation).toBe(31_628);
+  });
+
+  it('should use the whole circle, and say so, when the network is unreadable', () => {
+    const result = assessMarketShare({ ...input, reachableFraction: null });
+
+    expect(result.reachableFraction).toBeNull();
+    expect(result.reachablePopulation).toBe(31_628);
+    expect(result.notes.join(' ')).toContain('kemungkinan lebih kecil');
+  });
+});

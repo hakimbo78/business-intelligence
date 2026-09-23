@@ -29,6 +29,15 @@ export interface SensitivityPoint {
 export interface SensitivityAnalysis {
   /** Customers per day at which operating profit reaches zero. */
   breakEvenCustomersPerDay: number;
+  /**
+   * The highest rent that still breaks even at the customer's own estimate.
+   *
+   * The most actionable number the model can produce: the client is holding a
+   * quoted rent and can compare it directly. Null when the business earns
+   * nothing per customer, and negative is clamped to zero — a rent cannot be
+   * negative, and the shortfall is already visible elsewhere.
+   */
+  maxAffordableRent: number | null;
   /** What the customer estimated. */
   assumedCustomersPerDay: number;
   /**
@@ -79,6 +88,21 @@ function evaluate(
     paybackPeriodMonths,
     isViable: operatingProfit > 0,
   };
+}
+
+/**
+ * The rent at which the customer's own estimate exactly breaks even.
+ *
+ * Contribution per month less the operating costs: whatever is left is what
+ * rent may take.
+ */
+export function maxAffordableRent(inputs: FinancialInputs): number | null {
+  const contributionPerMonth =
+    inputs.customersPerDay * inputs.averageTransaction * inputs.grossMargin * inputs.operatingDays;
+
+  if (contributionPerMonth <= 0) return null;
+
+  return Math.max(0, Math.round(contributionPerMonth - inputs.operatingCostMonthly));
 }
 
 export function analyseSensitivity(inputs: FinancialInputs): SensitivityAnalysis {
@@ -136,8 +160,21 @@ export function analyseSensitivity(inputs: FinancialInputs): SensitivityAnalysis
       'depan pesaing terdekat pada jam sibuk dan hitung berapa orang masuk per jam.'
   );
 
+  const affordableRent = maxAffordableRent(inputs);
+
+  if (affordableRent !== null && affordableRent < inputs.rent) {
+    notes.push(
+      `Dengan perkiraan ${assumed} pelanggan/hari, sewa tertinggi yang masih impas adalah ` +
+        `Rp ${affordableRent.toLocaleString('id-ID')} per bulan. Sewa yang ditawarkan ` +
+        `Rp ${inputs.rent.toLocaleString('id-ID')} — selisihnya ` +
+        `Rp ${(inputs.rent - affordableRent).toLocaleString('id-ID')} setiap bulan. Tawar sewa ` +
+        'ke angka itu, atau pastikan pelanggan Anda lebih banyak dari perkiraan.'
+    );
+  }
+
   return {
     breakEvenCustomersPerDay: breakEven,
+    maxAffordableRent: affordableRent,
     assumedCustomersPerDay: assumed,
     marginOfSafetyPercent,
     points,

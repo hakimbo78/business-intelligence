@@ -257,11 +257,22 @@ model Competitor {
   distanceMeters  Int?     @map("distance_meters")
   rating          Float?
   reviewCount     Int?     @map("review_count")
+  /// When the provider's content was fetched.
+  ///
+  /// Google's Places policy exempts only the place ID from its caching
+  /// restriction; name, address, rating, review count and coordinates are
+  /// provider content and may not be retained indefinitely. This timestamp is
+  /// what makes expiry possible: `createdAt` records the row, not the content.
+  contentFetchedAt DateTime? @map("content_fetched_at")
+  /// True once the provider content above has been cleared by the retention
+  /// sweep. The place ID survives, so a re-run can fetch it again.
+  contentPurged    Boolean  @default(false) @map("content_purged")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@index([contentFetchedAt])
   @@map("competitors")
 }
 
