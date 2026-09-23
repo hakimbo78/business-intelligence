@@ -57,6 +57,46 @@ export interface RouteResult {
   destination: Coordinates;
 }
 
+export interface StreetViewAvailability {
+  available: boolean;
+  /** Where the camera actually stands, which is rarely the address itself. */
+  panoramaLocation?: Coordinates;
+  /** Capture date as the provider reports it, e.g. "2023-05". */
+  captureDate?: string;
+  /** The provider's own status word, for logging. */
+  status: string;
+}
+
+/** A rendered image, carried as a data: URI so no API key reaches the PDF. */
+export interface RenderedImage {
+  dataUri: string;
+  widthPx: number;
+  heightPx: number;
+}
+
+export interface StreetViewParams {
+  location: Coordinates;
+  /** Compass bearing to aim the camera. Omitted means the provider decides. */
+  headingDegrees?: number;
+  widthPx?: number;
+  heightPx?: number;
+}
+
+export interface StaticMapMarker {
+  location: Coordinates;
+  label: string;
+  /** A named colour the provider understands, e.g. "red". */
+  colour: string;
+}
+
+export interface StaticMapParams {
+  center: Coordinates;
+  zoom: number;
+  markers: StaticMapMarker[];
+  widthPx?: number;
+  heightPx?: number;
+}
+
 export interface SearchPlacesParams {
   query: string;
   location: Coordinates;
@@ -132,4 +172,22 @@ export interface LocationProvider {
    * Maps to: Google Routes API
    */
   calculateRoute(params: CalculateRouteParams): Promise<ProviderResult<RouteResult>>;
+
+  /**
+   * Whether a street-level photograph exists at all, and how old it is.
+   *
+   * Kept separate from fetching the image because on Google this lookup is
+   * free and unmetered while the image is billed: asking first means an
+   * address with no coverage — common down an Indonesian gang — never costs
+   * anything (PROJECT_MASTER_SPEC.md §22).
+   */
+  getStreetViewAvailability(
+    params: { location: Coordinates }
+  ): Promise<ProviderResult<StreetViewAvailability>>;
+
+  /** Fetch the street-level photograph itself. */
+  getStreetViewImage(params: StreetViewParams): Promise<ProviderResult<RenderedImage>>;
+
+  /** Render a map of the area with the given points pinned. */
+  getStaticMap(params: StaticMapParams): Promise<ProviderResult<RenderedImage>>;
 }

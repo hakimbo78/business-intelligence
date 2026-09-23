@@ -6,10 +6,15 @@ import {
   GeocodeParams,
   CalculateRouteParams,
   ProviderResult,
+  Coordinates,
   PlaceSummary,
   PlaceDetails,
   GeocodingResult,
   RouteResult,
+  StreetViewAvailability,
+  StreetViewParams,
+  StaticMapParams,
+  RenderedImage,
 } from './location-provider.interface.js';
 import { logger } from '../../lib/logger.js';
 import { describeGoogleMapsFailure, LocationProviderError } from './location-provider.error.js';
@@ -31,6 +36,21 @@ const GEOCODE_URL = 'https://geocode.googleapis.com/v4/geocode/address';
 const PLACES_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
 const PLACE_DETAILS_URL = 'https://places.googleapis.com/v1/places';
 const ROUTES_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+
+/**
+ * Imagery endpoints.
+ *
+ * Unlike the APIs above, these are the older billed services: they refuse a
+ * demo key and require billing enabled on the project. The metadata endpoint is
+ * the exception — Google does not charge for it, which is why every image
+ * request here is preceded by one.
+ */
+const STREET_VIEW_METADATA_URL = 'https://maps.googleapis.com/maps/api/streetview/metadata';
+const STREET_VIEW_IMAGE_URL = 'https://maps.googleapis.com/maps/api/streetview';
+const STATIC_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap';
+
+/** Largest size Google serves without the premium plan. */
+const MAX_IMAGE_PX = 640;
 
 /** Fields requested from Places. Asking for less costs less (§22). */
 const PLACE_SUMMARY_FIELDS = [
@@ -328,5 +348,150 @@ export class GoogleMapsProvider implements LocationProvider {
       },
       provenance: this.provenance('routing'),
     };
+  }
+
+  /**
+   * Fetch an image and return it as a data: URI.
+   *
+   * Google answers an unavailable image with a 200 and an HTML or JSON error
+   * body rather than an error status, so the content type is checked before the
+   * bytes are trusted.
+   */
+  private async fetchImage(
+    url: string,
+    operation: string,
+    widthPx: number,
+    heightPx: number
+  ): Promise<RenderedImage> {
+    let response: Response;
+    try {
+      response = await fetch(url);
+    } catch (error) {
+      throw new LocationProviderError(
+        `Could not reach Google Maps for ${operation}: ${(error as Error).message}`,
+        { provider: this.providerName, operation, cause: error }
+      );
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+
+    if (!response.ok || !contentType.startsWith('image/')) {
+      const body = await response.text().catch(() => '');
+      throw new LocationProviderError(
+        `Google Maps declined ${operation} (HTTP ${response.status}). ${body.slice(0, 200)}`,
+        { provider: this.providerName, operation }
+      );
+    }
+
+    const bytes = Buffer.from(await response.arrayBuffer());
+
+    return {
+      dataUri: `data:${contentType.split(';')[0]};base64,${bytes.toString('base64')}`,
+      widthPx,
+      heightPx,
+    };
+  }
+
+  async getStreetViewAvailability(params: {
+    location: Coordinates;
+  }): Promise<ProviderResult<StreetViewAvailability>> {
+    const url =
+      `${STREET_VIEW_METADATA_URL}?location=${params.location.latitude},${params.location.longitude}` +
+      `&key=${encodeURIComponent(this.key)}`;
+
+    const body = await this.request<{
+      status?: string;
+      date?: string;
+      location?: { lat?: number; lng?: number };
+    }>(url, { method: 'GET' }, 'getStreetViewAvailability');
+
+    const status = body.status ?? 'UNKNOWN';
+
+    // ZERO_RESULTS means Google looked and found nothing there, which is a
+    // finding. REQUEST_DENIED means the API is not enabled, which is a fault —
+    // and the two must not be reported to the customer as the same thing.
+    if (status !== 'OK' && status !== 'ZERO_RESULTS') {
+      throw new LocationProviderError(
+        `Street View metadata returned ${status}. The Street View Static API may not be ` +
+          'enabled, or billing may not be active on the Google Cloud project.',
+        { provider: this.providerName, operation: 'getStreetViewAvailability' }
+      );
+    }
+
+    return {
+      data: {
+        available: status === 'OK',
+        status,
+        captureDate: body.date,
+        panoramaLocation:
+          body.location?.lat !== undefined && body.location?.lng !== undefined
+            ? { latitude: body.location.lat, longitude: body.location.lng }
+            : undefined,
+      },
+      provenance: this.provenance('street_view_metadata'),
+    };
+  }
+
+  async getStreetViewImage(params: StreetViewParams): Promise<ProviderResult<RenderedImage>> {
+    const width = Math.min(params.widthPx ?? 640, MAX_IMAGE_PX);
+    const height = Math.min(params.heightPx ?? 400, MAX_IMAGE_PX);
+
+    const query = new URLSearchParams({
+      size: `${width}x${height}`,
+      location: `${params.location.latitude},${params.location.longitude}`,
+      fov: '80',
+      pitch: '0',
+      // Without this Google bills for, and returns, a grey "no imagery" tile.
+      return_error_code: 'true',
+      key: this.key,
+    });
+
+    if (params.headingDegrees !== undefined) {
+      query.set('heading', String(Math.round(params.headingDegrees)));
+    }
+
+    const image = await this.fetchImage(
+      `${STREET_VIEW_IMAGE_URL}?${query.toString()}`,
+      'getStreetViewImage',
+      width,
+      height
+    );
+
+    return { data: image, provenance: this.provenance('street_view_image') };
+  }
+
+  async getStaticMap(params: StaticMapParams): Promise<ProviderResult<RenderedImage>> {
+    const width = Math.min(params.widthPx ?? 640, MAX_IMAGE_PX);
+    const height = Math.min(params.heightPx ?? 480, MAX_IMAGE_PX);
+
+    const query = new URLSearchParams({
+      size: `${width}x${height}`,
+      center: `${params.center.latitude},${params.center.longitude}`,
+      zoom: String(params.zoom),
+      scale: '2',
+      maptype: 'roadmap',
+      language: 'id',
+      region: 'ID',
+      key: this.key,
+    });
+
+    // URLSearchParams escapes the pipes Google's marker syntax needs, so the
+    // markers are appended by hand after the rest is encoded.
+    const markers = params.markers
+      .map(
+        (m) =>
+          `&markers=${encodeURIComponent(`color:${m.colour}|label:${m.label}|` +
+            `${m.location.latitude},${m.location.longitude}`)}`
+      )
+      .join('');
+
+    const image = await this.fetchImage(
+      `${STATIC_MAP_URL}?${query.toString()}${markers}`,
+      'getStaticMap',
+      width,
+      height
+    );
+
+    return { data: image, provenance: this.provenance('static_map') };
   }
 }

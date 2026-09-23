@@ -6,6 +6,8 @@ import { prisma } from '../config/database.js';
 import { REPORT_DISCLAIMER_EN } from '../lib/disclaimer.js';
 import { summariseLocationCost, type LocationCostSummary } from '../lib/location-cost.js';
 import { describeRoad, type RoadContext } from '../lib/road-context.js';
+import { imageryService } from '../services/imagery.service.js';
+import type { LocationImagery } from '../lib/imagery.js';
 
 /**
  * Pull the road out of a free-text address.
@@ -71,6 +73,14 @@ export interface StructuredReport {
    * one down a gang are different businesses.
    */
   road: RoadContext | null;
+  /**
+   * A photograph of the frontage and a map with the competitors pinned.
+   *
+   * The road reading above is inferred from a name and the neighbours; a
+   * photograph shows the width, the parking and the frontage that the inference
+   * explicitly cannot see. Null when imagery is switched off.
+   */
+  imagery: LocationImagery | null;
   synthesis: ReportSynthesis;
   candidates: {
     totalIdentified: number;
@@ -246,6 +256,16 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
             .filter((a): a is string => Boolean(a)),
         })
       : null;
+    // Billed Google products, so only for a single assessed premises, and only
+    // once — the result is stored in the report and reused by every later PDF.
+    const imagery = assessed
+      ? await imageryService.capture({
+          premises: { latitude: assessed.latitude, longitude: assessed.longitude },
+          competitors: project.competitors,
+          projectId,
+        })
+      : null;
+
     const premises = assessed
       ? {
           name: assessed.name,
@@ -268,6 +288,7 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       disclaimer: REPORT_DISCLAIMER_EN,
       premises,
       road,
+      imagery,
       synthesis,
       candidates: {
         totalIdentified,

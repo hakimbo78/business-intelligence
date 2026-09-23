@@ -9,7 +9,33 @@ import {
   PlaceDetails,
   GeocodingResult,
   RouteResult,
+  Coordinates,
+  StreetViewAvailability,
+  StreetViewParams,
+  StaticMapParams,
+  RenderedImage,
 } from './location-provider.interface.js';
+
+/**
+ * A visibly fake image.
+ *
+ * Deliberately not a grey rectangle: if a mock image ever reaches a customer's
+ * report, it must be unmistakable rather than look like a real photograph of
+ * somewhere else.
+ */
+function placeholderImage(label: string, widthPx: number, heightPx: number): RenderedImage {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${widthPx}" height="${heightPx}">` +
+    `<rect width="100%" height="100%" fill="#dfe6e9"/>` +
+    `<text x="50%" y="50%" font-family="sans-serif" font-size="20" fill="#636e72" ` +
+    `text-anchor="middle">CONTOH (MOCK) - ${label}</text></svg>`;
+
+  return {
+    dataUri: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
+    widthPx,
+    heightPx,
+  };
+}
 
 export class MockLocationProvider implements LocationProvider {
   readonly providerName = 'MockLocationProvider';
@@ -100,6 +126,56 @@ export class MockLocationProvider implements LocationProvider {
         source: this.providerName,
         retrievedAt: new Date().toISOString(),
         dataType: 'routing',
+        confidence: 'HIGH',
+      },
+    };
+  }
+  async getStreetViewAvailability(params: {
+    location: Coordinates;
+  }): Promise<ProviderResult<StreetViewAvailability>> {
+    return {
+      data: {
+        available: true,
+        status: 'OK',
+        captureDate: '2023-05',
+        // A few metres off, as a real panorama always is.
+        panoramaLocation: {
+          latitude: params.location.latitude + 0.0001,
+          longitude: params.location.longitude,
+        },
+      },
+      provenance: {
+        source: this.providerName,
+        retrievedAt: new Date().toISOString(),
+        dataType: 'street_view_metadata',
+        confidence: 'HIGH',
+      },
+    };
+  }
+
+  async getStreetViewImage(params: StreetViewParams): Promise<ProviderResult<RenderedImage>> {
+    return {
+      data: placeholderImage('Street View', params.widthPx ?? 640, params.heightPx ?? 400),
+      provenance: {
+        source: this.providerName,
+        retrievedAt: new Date().toISOString(),
+        dataType: 'street_view_image',
+        confidence: 'HIGH',
+      },
+    };
+  }
+
+  async getStaticMap(params: StaticMapParams): Promise<ProviderResult<RenderedImage>> {
+    return {
+      data: placeholderImage(
+        `Peta (${params.markers.length} penanda)`,
+        params.widthPx ?? 640,
+        params.heightPx ?? 480
+      ),
+      provenance: {
+        source: this.providerName,
+        retrievedAt: new Date().toISOString(),
+        dataType: 'static_map',
         confidence: 'HIGH',
       },
     };

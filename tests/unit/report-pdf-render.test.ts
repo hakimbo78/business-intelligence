@@ -200,3 +200,81 @@ describe('Break-even section in the report', () => {
     expect(html).not.toContain('Titik Impas');
   });
 });
+
+describe('Imagery in the report', () => {
+  const road = {
+    roadName: 'Jalan Delima Raya',
+    indicatedClass: 'MAIN_ROAD',
+    classBasis: 'Nama mengandung penanda jalan utama.',
+    businessesOnSameRoad: 5,
+    businessesConsidered: 12,
+    addressPrecision: null,
+    notes: [],
+  };
+
+  it('should show the frontage photograph alongside the road reading', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      road,
+      imagery: {
+        streetView: { dataUri: 'data:image/jpeg;base64,ZZZ', captureDate: '2024-02', offsetMeters: 9 },
+        map: null,
+        notes: ['Foto ini diambil Google Street View pada Februari 2024.'],
+        unavailableReason: null,
+      },
+    } as never);
+
+    expect(html).toContain('<img src="data:image/jpeg;base64,ZZZ"');
+    // The caveat has to be on the page with the picture, not elsewhere.
+    expect(html).toContain('Februari 2024');
+  });
+
+  it('should pin the competitors on a map in the competitor section', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      competitors: [
+        { name: 'Kopi Kenangan', category: 'cafe', distanceMeters: 120, rating: 4.5, reviewCount: 300 },
+      ],
+      imagery: {
+        streetView: null,
+        map: { dataUri: 'data:image/png;base64,MAP', markedCompetitors: 4 },
+        notes: [],
+        unavailableReason: null,
+      },
+    } as never);
+
+    expect(html).toContain('data:image/png;base64,MAP');
+    expect(html).toContain('Penanda merah (A)');
+  });
+
+  it('should say why there is no photograph rather than leaving a gap', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      road,
+      imagery: {
+        streetView: null,
+        map: null,
+        notes: [],
+        unavailableReason: 'Foto lokasi tidak disertakan: layanan citra Google belum diaktifkan.',
+      },
+    } as never);
+
+    expect(html).toContain('belum diaktifkan');
+    expect(html).not.toContain('<img');
+  });
+
+  it('should refuse to render anything that is not an image we encoded', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      road,
+      imagery: {
+        streetView: { dataUri: 'https://evil.example/pixel.png', captureDate: null, offsetMeters: null },
+        map: null,
+        notes: [],
+        unavailableReason: null,
+      },
+    } as never);
+
+    expect(html).not.toContain('evil.example');
+  });
+});

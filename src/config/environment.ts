@@ -27,6 +27,14 @@ const envSchema = z.object({
 
   // Google Maps (optional — only required when MAP_PROVIDER=google)
   GOOGLE_MAPS_API_KEY: z.string().min(1).optional(),
+  // Street View and Static Maps are billed products: unlike the other Google
+  // APIs used here they refuse a demo key and need billing enabled. Off by
+  // default so a project without billing produces a report with a note rather
+  // than a failure.
+  ENABLE_LOCATION_IMAGERY: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
 
   // AI Provider (optional — only required when AI_PROVIDER=gemini or openrouter)
   AI_PROVIDER: z.enum(['mock', 'gemini', 'openrouter']).default('mock'),

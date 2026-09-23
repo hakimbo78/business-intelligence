@@ -101,6 +101,39 @@ function locationContextSection(report: StructuredReport): string {
 
 
 /**
+ * An image with its caption.
+ *
+ * The caption is not decoration. A photograph is the most persuasive thing in
+ * the report and the easiest to over-read, so nothing is shown without the
+ * words that bound it.
+ */
+function figure(dataUri: string, caption: string): string {
+  // Only ever an image we fetched and encoded ourselves; anything else would be
+  // an arbitrary URL rendered inside the customer's report.
+  if (!dataUri.startsWith('data:image/')) return '';
+
+  return `
+      <figure>
+        <img src="${dataUri}" alt="${esc(caption)}">
+        <figcaption>${esc(caption)}</figcaption>
+      </figure>`;
+}
+
+/** The caveats that travel with the imagery, or the reason there is none. */
+function imageryNotes(report: StructuredReport): string {
+  const imagery = report.imagery;
+  if (!imagery) return '';
+
+  if (imagery.unavailableReason) {
+    return `<p class="note">${esc(imagery.unavailableReason)}</p>`;
+  }
+
+  return imagery.notes.length > 0
+    ? `<div class="warning"><ul>${imagery.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`
+    : '';
+}
+
+/**
  * What kind of road the premises faces.
  *
  * Usually the first thing a shopfront owner wants to know, and the one thing a
@@ -136,6 +169,15 @@ function roadSection(report: StructuredReport): string {
           <td>${esc(road.businessesOnSameRoad)} dari ${esc(road.businessesConsidered)}</td>
         </tr>
       </table>
+      ${
+        report.imagery?.streetView
+          ? figure(
+              report.imagery.streetView.dataUri,
+              'Foto Google Street View ke arah titik alamat properti.'
+            )
+          : ''
+      }
+      ${imageryNotes(report)}
       ${
         road.notes.length > 0
           ? `<div class="warning"><ul>${road.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`
@@ -297,6 +339,14 @@ function competitorSection(report: StructuredReport): string {
         Jumlah ulasan menunjukkan seberapa ramai sebuah tempat — bukan ukuran mutlak,
         tetapi dapat Anda periksa sendiri di lapangan.
       </p>
+      ${
+        report.imagery?.map
+          ? figure(
+              report.imagery.map.dataUri,
+              'Penanda merah (A) adalah properti yang dinilai; penanda biru adalah pesaing terdekat.'
+            )
+          : ''
+      }
       <table>
         <thead>
           <tr>
@@ -389,6 +439,9 @@ export function renderReportHtml(report: StructuredReport): string {
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
         th { background-color: #f2f2f2; }
         .score-box { display: inline-block; padding: 10px 20px; background: #27ae60; color: white; font-size: 24px; font-weight: bold; border-radius: 8px; text-align: center; }
+        figure { margin: 15px 0; }
+        figure img { width: 100%; border: 1px solid #ddd; border-radius: 8px; display: block; }
+        figcaption { font-size: 12px; color: #7f8c8d; margin-top: 6px; }
         .disclaimer { margin-top: 50px; padding: 20px; border: 1px solid #e74c3c; border-radius: 8px; background: #fdf3f2; font-size: 12px; }
       </style>
     </head>
