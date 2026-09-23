@@ -18,6 +18,12 @@ process.env.AUTH_DISABLED = 'true';
 // Property data comes from our own store, so integration tests exercise the
 // real provider against rows they submit themselves.
 
+// OpenStreetMap and WorldPop are live third-party services reached over the
+// network. Leaving them on made the report suite depend on a volunteer-run
+// endpoint's rate limiter, which failed only when the whole suite ran.
+process.env.ENABLE_OSM_ROAD = 'false';
+process.env.ENABLE_POPULATION_DATA = 'false';
+
 // Drop any real credentials so a misconfigured provider fails loudly
 // instead of quietly reaching an external service.
 delete process.env.GOOGLE_MAPS_API_KEY;

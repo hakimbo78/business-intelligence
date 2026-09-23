@@ -36,6 +36,19 @@ const envSchema = z.object({
     .optional()
     .transform((v) => v === 'true'),
 
+  // Free external sources, so they are on unless switched off. Both reach a
+  // third-party service over the network, which is why they are switchable at
+  // all: tests must never depend on someone else's uptime, and a volunteer-run
+  // endpoint must be easy to disable if it starts rate-limiting us.
+  ENABLE_OSM_ROAD: z
+    .string()
+    .optional()
+    .transform((v) => v !== 'false'),
+  ENABLE_POPULATION_DATA: z
+    .string()
+    .optional()
+    .transform((v) => v !== 'false'),
+
   // AI Provider (optional — only required when AI_PROVIDER=gemini or openrouter)
   AI_PROVIDER: z.enum(['mock', 'gemini', 'openrouter']).default('mock'),
   GEMINI_API_KEY: z.string().min(1).optional(),

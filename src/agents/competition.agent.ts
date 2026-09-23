@@ -11,6 +11,7 @@ import {
   describeCompetition,
   type CompetitionCount,
 } from '../lib/competitor-types.js';
+import { resolveTradeProfile } from '../lib/trade-profile.js';
 
 export const competitionAnalysisSchema = z.object({
   directCompetitorsCount: z.number().describe('Number of direct competitors'),
@@ -44,8 +45,20 @@ export class CompetitionAgent {
     }
 
     const researchPlan = project.researchPlan as any;
-    const searchRadiusMeters = researchPlan.searchRadiusMeters || 3000;
     const categories = researchPlan.competitorCategories || [];
+
+    const profile = resolveTradeProfile([
+      project.businessProfile.businessCategory,
+      project.businessProfile.businessSubcategory,
+      ...categories,
+    ]);
+
+    // The radius comes from the trade, not from the model.
+    //
+    // Two laundries in the same city were previously given 1,500 m and 2,000 m
+    // because the planner invented a number each time, and catchment scales
+    // with the square of it.
+    const searchRadiusMeters = profile.catchmentRadiusMeters;
 
     // 2. Find the centre.
     //
@@ -89,6 +102,13 @@ export class CompetitionAgent {
     const competitorSummary = allCompetitors.map(c => ({ name: c.name, category: c.category }));
 
     const prompt = `You are a Competition Analyst Agent.
+
+CLASSIFICATION RULE — every business in the list was matched by Google's own
+category for this trade, so treat them all as DIRECT competitors unless a name
+plainly shows otherwise (for example a shoe-cleaning shop in a laundry list).
+Do not split the list evenly to look balanced: the previous version reported
+"10 direct and 10 indirect" for twenty businesses that were all the same type,
+which was invented.
 
 COUNTING RULE — the list below is ALL you may count.
 It contains exactly ${competitorSummary.length} businesses. directCompetitorsCount plus

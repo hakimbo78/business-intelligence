@@ -57,12 +57,23 @@ describe('Density from the count', () => {
 });
 
 describe('Explaining the count', () => {
-  it('should say the real number is higher when the search hit its ceiling', () => {
+  it('should say the real number is higher when the census could not finish', () => {
     const text = describeCompetition({ ...base, found: 20, capped: true, nearestMeters: 180 });
 
-    expect(text).toContain('BATAS');
-    expect(text).toContain('lebih banyak lagi');
+    expect(text).toContain('terhenti sebelum selesai');
+    expect(text).toContain('LEBIH BANYAK');
     expect(text).toContain('sudah padat');
+  });
+
+  it('should say a finished census counted, rather than sampled', () => {
+    const text = describeCompetition({
+      ...base, found: 267, capped: false, censusComplete: true, nearestMeters: 101,
+    });
+
+    // The distinction the customer is paying for: 267 counted, not 20 sampled.
+    expect(text).toContain('267');
+    expect(text).toContain('penyisiran bertahap');
+    expect(text).not.toContain('terhenti');
   });
 
   it('should not let an empty result read as an opportunity', () => {

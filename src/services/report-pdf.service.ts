@@ -1,5 +1,6 @@
 import puppeteer from 'puppeteer';
 import { REPORT_DISCLAIMER_ID } from '../lib/disclaimer.js';
+import { OSM_ROAD_CLASS_LABEL } from '../lib/osm-road.js';
 import { ROAD_CLASS_LABEL } from '../lib/road-context.js';
 import type { StructuredReport } from '../agents/report.agent.js';
 import { logger } from '../lib/logger.js';
@@ -35,6 +36,13 @@ function list(items: unknown): string {
 }
 
 /** Scoring dimension keys, in the words a business owner would use. */
+/** Enum values reach the page in the reader's language. */
+const ENUM_ID: Record<string, string> = {
+  WEAK: 'Lemah', MODERATE: 'Sedang', STRONG: 'Kuat',
+  LOW: 'Rendah', MEDIUM: 'Sedang', HIGH: 'Tinggi',
+  UNKNOWN: 'Tidak terukur',
+};
+
 const DIMENSION_LABEL: Record<string, string> = {
   market_fit: 'Kecocokan Pasar',
   customer_fit: 'Kecocokan Pelanggan',
@@ -80,7 +88,7 @@ function locationContextSection(report: StructuredReport): string {
     .join('');
 
   return `
-      <h2>4. Konteks Lokasi</h2>
+      <h2>6. Konteks Lokasi</h2>
       <p class="note">
         Jarak ke fasilitas terdekat, diukur dari titik properti. Semua angka ini
         dapat Anda periksa sendiri di lapangan.
@@ -139,6 +147,166 @@ function capsSection(report: StructuredReport): string {
 }
 
 /**
+ * Where this report's assumptions come from.
+ *
+ * The catchment radius, the healthy rent band and the visit rate are retail
+ * rules of thumb, not measurements. They drive every market figure below, so
+ * they are stated before those figures rather than buried at the end.
+ */
+function tradeProfileSection(report: StructuredReport): string {
+  const profile = report.tradeProfile;
+  if (!profile) return '';
+
+  return `
+      <h2>2. Metodologi &amp; Profil Jenis Usaha</h2>
+      <div class="panel">
+        <strong>${esc(profile.label)}</strong><br>
+        Radius jangkauan yang dipakai dalam laporan ini:
+        <strong>${esc(profile.catchmentRadiusMeters)} m</strong> dari properti.
+      </div>
+      <div class="warning"><ul>${profile.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
+}
+
+/**
+ * How many people live within reach.
+ *
+ * This replaces the line the report used to carry saying that population could
+ * not be measured at all. The rings show how fast the neighbourhood thins out,
+ * which decides whether a short catchment is enough.
+ */
+function populationSection(report: StructuredReport): string {
+  const population = report.population;
+  if (!population) return '';
+
+  const rows = population.rings
+    .map(
+      (r) => `
+            <tr${r.radiusMeters === population.catchmentRadiusMeters ? ' style="background:#eaf4fb;font-weight:bold"' : ''}>
+              <td>${r.radiusMeters} m${r.radiusMeters === population.catchmentRadiusMeters ? ' &larr; jangkauan usaha Anda' : ''}</td>
+              <td>${r.population.toLocaleString('id-ID')} jiwa</td>
+            </tr>`
+    )
+    .join('');
+
+  return `
+      <h2>4. Penduduk di Sekitar Lokasi</h2>
+      ${
+        population.rings.length === 0
+          ? `<div class="panel"><em>${UNAVAILABLE}</em></div>`
+          : `<table>
+        <thead><tr><th style="width:45%">Radius dari properti</th><th>Jumlah penduduk</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`
+      }
+      <div class="warning"><ul>${population.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
+}
+
+/**
+ * The share of the neighbourhood this business has to win.
+ *
+ * The one number in the report that is a demand rather than a projection, and
+ * the reason the rest of the analysis is worth reading.
+ */
+function marketShareSection(report: StructuredReport): string {
+  const share = report.marketShare;
+  if (!share) return '';
+
+  const row = (label: string, value: string, style = '') =>
+    `<tr><th style="width:55%">${label}</th><td${style}>${value}</td></tr>`;
+
+  const shareColour =
+    share.requiredSharePercent === null ? '#7f8c8d'
+      : share.requiredSharePercent > 50 ? '#e74c3c'
+      : share.requiredSharePercent > 20 ? '#f39c12'
+      : '#27ae60';
+
+  return `
+      <h2>5. Pangsa Pasar yang Harus Anda Rebut</h2>
+      <div class="panel">
+        <table style="margin-top:0">
+          ${row(
+            'Perkiraan pasar di sekitar lokasi',
+            share.potentialTransactionsPerMonth === null
+              ? `<em>${UNAVAILABLE}</em>`
+              : `${share.potentialTransactionsPerMonth.toLocaleString('id-ID')} transaksi / bulan`
+          )}
+          ${row(
+            'Yang Anda butuhkan agar tidak rugi',
+            `${share.requiredTransactionsPerMonth.toLocaleString('id-ID')} transaksi / bulan`
+          )}
+          ${row('Jumlah pesaing di jangkauan yang sama', `${share.competitorCount} usaha`)}
+          ${row(
+            'Pangsa yang harus Anda rebut',
+            share.requiredSharePercent === null
+              ? `<em>${UNAVAILABLE}</em>`
+              : `${share.requiredSharePercent}% dari seluruh pasar`,
+            ` style="font-size:20px;font-weight:bold;color:${shareColour}"`
+          )}
+          ${row(
+            'Pangsa pesaing rata-rata',
+            share.averageSharePercent === null ? `<em>${UNAVAILABLE}</em>` : `${share.averageSharePercent}%`
+          )}
+          ${row(
+            'Berarti Anda harus meraih',
+            share.timesAverageShare === null
+              ? `<em>${UNAVAILABLE}</em>`
+              : `<strong>${share.timesAverageShare}&times;</strong> pangsa pesaing rata-rata`
+          )}
+        </table>
+      </div>
+      <div class="warning"><ul>${share.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
+}
+
+/**
+ * The road as OpenStreetMap records it.
+ *
+ * Shown beside the name-based reading rather than replacing it: the two agree
+ * most of the time, and where they disagree the reader should see both.
+ */
+function osmRoadSection(report: StructuredReport): string {
+  const road = report.osmRoad;
+  if (!road) return '';
+
+  const yesNo = (value: boolean | null, yes: string, no: string) =>
+    value === null ? `<em>${UNAVAILABLE}</em>` : value ? yes : no;
+
+  const row = (label: string, value: string) =>
+    `<tr><th style="width:45%">${label}</th><td>${value}</td></tr>`;
+
+  return `
+      <table>
+        ${row('Nama ruas (OpenStreetMap)', road.name ? esc(road.name) : `<em>${UNAVAILABLE}</em>`)}
+        ${row('Klasifikasi resmi', esc(OSM_ROAD_CLASS_LABEL[road.roadClass]))}
+        ${row('Bisa dilalui mobil', yesNo(road.carAccessible, 'Ya', '<strong style="color:#e74c3c">Tidak</strong>'))}
+        ${row('Arah lalu lintas', yesNo(road.oneWay, '<strong>Satu arah</strong>', 'Dua arah'))}
+        ${row('Lebar jalan', road.widthMeters === null ? `<em>${UNAVAILABLE}</em>` : `${road.widthMeters} m`)}
+        ${row('Jumlah lajur', road.lanes === null ? `<em>${UNAVAILABLE}</em>` : String(road.lanes))}
+        ${row('Permukaan', road.surface ? esc(road.surface) : `<em>${UNAVAILABLE}</em>`)}
+        ${row(
+          'Jalan utama terdekat',
+          road.nearestMajorRoad
+            ? `${esc(road.nearestMajorRoad.name ?? 'tanpa nama')} (${road.nearestMajorRoad.distanceMeters} m)`
+            : `<em>${UNAVAILABLE}</em>`
+        )}
+      </table>
+      ${
+        road.notes.length > 0
+          ? `<div class="warning"><ul>${road.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`
+          : ''
+      }`;
+}
+
+/** The licences that require naming their source. */
+function attributionSection(report: StructuredReport): string {
+  const attributions = report.attributions ?? [];
+  if (attributions.length === 0) return '';
+
+  return `
+      <h2>Sumber Data</h2>
+      <p class="note">${attributions.map((a) => esc(a)).join('<br>')}</p>`;
+}
+
+/**
  * An image with its caption.
  *
  * The caption is not decoration. A photograph is the most persuasive thing in
@@ -188,7 +356,7 @@ function roadSection(report: StructuredReport): string {
       : '#7f8c8d';
 
   return `
-      <h2>5. Jenis Jalan &amp; Akses</h2>
+      <h2>7. Jenis Jalan &amp; Akses</h2>
       <table>
         <tr>
           <th style="width:45%">Nama jalan</th>
@@ -207,6 +375,7 @@ function roadSection(report: StructuredReport): string {
           <td>${esc(road.businessesOnSameRoad)} dari ${esc(road.businessesConsidered)}</td>
         </tr>
       </table>
+      ${osmRoadSection(report)}
       ${
         report.imagery?.streetView
           ? figure(
@@ -244,7 +413,7 @@ function premisesSection(report: StructuredReport): string {
       : `${cost.occupancyCostRatio}% dari pendapatan setahun`;
 
   return `
-      <h2>6. Properti yang Dinilai</h2>
+      <h2>8. Properti yang Dinilai</h2>
       <div class="panel">
         <strong>${esc(premises.name)}</strong><br>
         ${esc(premises.address)}
@@ -259,6 +428,11 @@ function premisesSection(report: StructuredReport): string {
         ${row('Investasi lokasi awal', money(cost.estimatedLocationInvestment))}
         ${row('Tingkat keyakinan data', esc(premises.confidence))}
       </table>
+      ${
+        report.occupancy && report.occupancy.verdict !== 'UNKNOWN'
+          ? `<div class="${report.occupancy.verdict === 'HEALTHY' ? 'panel' : report.occupancy.verdict === 'TIGHT' ? 'warning' : 'alert'}">${esc(report.occupancy.message)}</div>`
+          : ''
+      }
       ${
         cost.missing.length > 0
           ? `<p class="note">Tidak tersedia dari informasi yang diberikan: ${esc(cost.missing.join(', '))}.</p>`
@@ -298,15 +472,34 @@ function sensitivitySection(report: StructuredReport): string {
               <td>${p.customersPerDay}${marker}</td>
               <td>${money(p.monthlyRevenue)}</td>
               <td style="color:${p.operatingProfit >= 0 ? '#27ae60' : '#e74c3c'}">${money(p.operatingProfit)}</td>
-              <td>${p.paybackPeriodMonths === null ? 'Tidak balik modal' : `${p.paybackPeriodMonths} bulan`}</td>
+              <td>${
+                p.paybackPeriodMonths === null
+                  ? 'Tidak balik modal'
+                  : p.isBreakEven
+                    // At break-even profit is ~0, so payback is arbitrarily
+                    // large: printing "1000 bulan" reads as a typo, not a fact.
+                    ? 'Impas — belum ada laba untuk balik modal'
+                    : `${p.paybackPeriodMonths} bulan`
+              }</td>
             </tr>`;
     })
     .join('');
 
+  // A negative margin is not a tolerance, it is a shortfall, and the label has
+  // to change with the sign or it reads as "you may miss by minus 66%".
+  const marginIsShortfall =
+    s.marginOfSafetyPercent !== null && s.marginOfSafetyPercent < 0;
+
+  const marginLabel = marginIsShortfall
+    ? 'Kekurangan terhadap titik impas'
+    : 'Jarak aman (boleh meleset sampai)';
+
   const margin =
     s.marginOfSafetyPercent === null
       ? UNAVAILABLE
-      : `${s.marginOfSafetyPercent}%`;
+      : marginIsShortfall
+        ? `${Math.abs(s.marginOfSafetyPercent)}% DI BAWAH titik impas`
+        : `${s.marginOfSafetyPercent}%`;
 
   const marginColour =
     s.marginOfSafetyPercent === null ? '#7f8c8d'
@@ -315,7 +508,7 @@ function sensitivitySection(report: StructuredReport): string {
       : '#27ae60';
 
   return `
-      <h2>9. Titik Impas &amp; Uji Ketahanan</h2>
+      <h2>11. Titik Impas &amp; Uji Ketahanan</h2>
       <div class="panel">
         <table style="margin-top:0">
           <tr>
@@ -327,7 +520,7 @@ function sensitivitySection(report: StructuredReport): string {
             <td>${esc(s.assumedCustomersPerDay)} orang/hari</td>
           </tr>
           <tr>
-            <th>Jarak aman (boleh meleset sampai)</th>
+            <th>${marginLabel}</th>
             <td style="color:${marginColour};font-weight:bold">${margin}</td>
           </tr>
         </table>
@@ -362,11 +555,19 @@ function sensitivitySection(report: StructuredReport): string {
  * the customer can go and verify on foot.
  */
 function competitorSection(report: StructuredReport): string {
-  const competitors = report.competitors ?? [];
+  // Google sometimes holds two entries for one shop. Listing "Novo Hill
+  // Laundry, 592 m" twice makes the whole census look careless.
+  const seen = new Set<string>();
+  const competitors = (report.competitors ?? []).filter((c) => {
+    const key = `${c.name?.trim().toLowerCase()}@${c.distanceMeters ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   const countExplanation = (report.analysis as any)?.competition?.countExplanation ?? null;
   if (competitors.length === 0) {
     return `
-      <h2>10. Pesaing di Sekitar Lokasi</h2>
+      <h2>12. Pesaing di Sekitar Lokasi</h2>
       <div class="panel"><em>${UNAVAILABLE}</em></div>`;
   }
 
@@ -384,7 +585,7 @@ function competitorSection(report: StructuredReport): string {
     .join('');
 
   return `
-      <h2>10. Pesaing di Sekitar Lokasi</h2>
+      <h2>12. Pesaing di Sekitar Lokasi</h2>
       ${
         countExplanation
           ? `<div class="panel"><strong>Hasil pengukuran:</strong> ${esc(countExplanation)}</div>`
@@ -441,11 +642,16 @@ function scoreSection(report: StructuredReport): string {
     .join('');
 
   return `
-      <h2>11. Rincian Skor</h2>
+      <h2>13. Rincian Skor</h2>
       <p class="note">
-        Skor keseluruhan adalah rata-rata sepuluh dimensi di bawah ini. Setiap skor
-        disertai dasar penilaiannya, sehingga Anda dapat menilai sendiri apakah
-        bobotnya sesuai dengan prioritas usaha Anda.
+        Setiap dimensi di bawah ini disertai dasar penilaiannya, sehingga Anda dapat menilai sendiri
+        apakah bobotnya sesuai dengan prioritas usaha Anda. Bobot tiap dimensi mengikuti jenis usaha
+        Anda &mdash; akses kendaraan, misalnya, jauh lebih menentukan bagi bengkel daripada bagi laundry.
+        ${
+          (report.analysis as any)?.scoring?.caps?.length
+            ? 'Skor keseluruhan di halaman pertama LEBIH RENDAH dari rata-rata dimensi ini karena dibatasi oleh alasan yang disebutkan di sana.'
+            : ''
+        }
       </p>
       <table>
         <thead>
@@ -524,17 +730,22 @@ export function renderReportHtml(report: StructuredReport): string {
       <h2>1. Ringkasan Eksekutif</h2>
       <div class="panel">${esc(synthesis?.executiveSummary)}</div>
 
-      <h2>2. Metodologi</h2>
+      ${tradeProfileSection(report)}
+
       <div class="panel">${esc(synthesis?.methodology)}</div>
 
       <h2>3. Permintaan &amp; Persaingan</h2>
       <div class="panel">
-        <strong>Sinyal Permintaan:</strong> ${esc(analysis.demand?.demandSignal)}<br>
-        <strong>Tingkat Keyakinan:</strong> ${esc(analysis.demand?.confidence)}<br>
-        <strong>Kepadatan Kompetisi:</strong> ${esc(analysis.competition?.densityLevel)}
+        <strong>Sinyal Permintaan:</strong> ${esc(ENUM_ID[analysis.demand?.demandSignal] ?? analysis.demand?.demandSignal)}<br>
+        <strong>Tingkat Keyakinan:</strong> ${esc(ENUM_ID[analysis.demand?.confidence] ?? analysis.demand?.confidence)}<br>
+        <strong>Kepadatan Kompetisi:</strong> ${esc(ENUM_ID[analysis.competition?.densityLevel] ?? analysis.competition?.densityLevel)}
         <p>${esc(analysis.demand?.customerFit)}</p>
         <p>${esc(analysis.competition?.summary)}</p>
       </div>
+
+      ${populationSection(report)}
+
+      ${marketShareSection(report)}
 
       ${locationContextSection(report)}
 
@@ -542,13 +753,13 @@ export function renderReportHtml(report: StructuredReport): string {
 
       ${premisesSection(report)}
 
-      <h2>7. Kandidat Lokasi</h2>
+      <h2>9. Kandidat Lokasi</h2>
       <div class="panel">
         <strong>Teridentifikasi:</strong> ${esc(report.candidates?.totalIdentified)} &nbsp;|&nbsp;
         <strong>Masuk daftar pendek:</strong> ${esc(report.candidates?.shortlistedCount)}
       </div>
 
-      <h2>8. Skenario Finansial</h2>
+      <h2>10. Skenario Finansial</h2>
       <table>
         <thead>
           <tr>
@@ -573,15 +784,17 @@ export function renderReportHtml(report: StructuredReport): string {
 
       ${scoreSection(report)}
 
-      <h2>12. Hipotesis Celah Pasar</h2>
+      <h2>14. Hipotesis Celah Pasar</h2>
       <div class="panel">
         <strong>Rekomendasi Keseluruhan:</strong>
         ${esc(analysis.marketGap?.overallRecommendation)}
         <p>${esc(analysis.marketGap?.summary)}</p>
       </div>
 
-      <h2>13. Daftar Periksa Validasi Lapangan</h2>
+      <h2>15. Daftar Periksa Validasi Lapangan</h2>
       <ul>${list(synthesis?.validationChecklist)}</ul>
+
+      ${attributionSection(report)}
 
       <div class="disclaimer">
         <p><strong>Penafian</strong><br>${esc(REPORT_DISCLAIMER_ID)}</p>

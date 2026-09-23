@@ -3,6 +3,7 @@ import { env } from '../config/environment.js';
 import { createAIProvider } from '../providers/ai/index.js';
 import { projectService } from '../services/project.service.js';
 import { calculateScores, ScoringResult } from '../lib/scoring-calculator.js';
+import { resolveTradeProfile } from '../lib/trade-profile.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../config/database.js';
 
@@ -29,8 +30,16 @@ export class ScoringAgent {
       throw new Error(`Project ${projectId} has no analysis data to score`);
     }
 
-    // 2. Calculate deterministic scores (pure math — no AI)
+    // 2. Calculate deterministic scores (pure math — no AI).
+    //
+    // Weighted by trade: what decides a laundry is not what decides a workshop.
+    const profile = resolveTradeProfile([
+      project.businessProfile?.businessCategory,
+      project.businessProfile?.businessSubcategory,
+    ]);
+
     const scores = calculateScores({
+      weights: profile.weights,
       competitionAnalysis: project.competitionAnalysis as any,
       demandAnalysis: project.demandAnalysis as any,
       marketGapAnalysis: project.marketGapAnalysis as any,

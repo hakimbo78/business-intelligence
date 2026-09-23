@@ -48,6 +48,13 @@ export interface ScoringResult {
 }
 
 export interface ScoringInputs {
+  /**
+   * Dimension weights for this trade, from its profile.
+   *
+   * Equal weighting said that car access matters to a laundry as much as the
+   * number of laundries next door. Missing dimensions default to 1.
+   */
+  weights?: Partial<Record<string, number>>;
   competitionAnalysis?: any;
   demandAnalysis?: any;
   marketGapAnalysis?: any;
@@ -292,8 +299,13 @@ export function calculateScores(inputs: ScoringInputs): ScoringResult {
   // Unmeasured dimensions leave the average rather than dragging it to zero.
   const measured = dimensions.filter((d) => !d.notMeasured);
 
-  let overallScore = measured.length > 0
-    ? Math.round(measured.reduce((sum, d) => sum + d.score, 0) / measured.length)
+  const weightOf = (dimension: string) => inputs.weights?.[dimension] ?? 1;
+  const totalWeight = measured.reduce((sum, d) => sum + weightOf(d.dimension), 0);
+
+  let overallScore = totalWeight > 0
+    ? Math.round(
+        measured.reduce((sum, d) => sum + d.score * weightOf(d.dimension), 0) / totalWeight
+      )
     : 0;
 
   const caps: string[] = [];

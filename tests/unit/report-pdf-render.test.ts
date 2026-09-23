@@ -278,3 +278,130 @@ describe('Imagery in the report', () => {
     expect(html).not.toContain('evil.example');
   });
 });
+
+describe('Defects the Bella Casa report exposed', () => {
+  it('should not print a payback period at the break-even row', () => {
+    // Profit is ~0 there, so the division produced "1000 bulan".
+    const html = renderReportHtml({
+      ...(base as object),
+      analysis: {
+        financial: {
+          sensitivity: {
+            breakEvenCustomersPerDay: 25,
+            assumedCustomersPerDay: 15,
+            marginOfSafetyPercent: -66.7,
+            points: [
+              { customersPerDay: 25, monthlyRevenue: 32_500_000, operatingProfit: 125_000, paybackPeriodMonths: 1000, isViable: true, isAssumption: false, isBreakEven: true },
+            ],
+            notes: [],
+          },
+        },
+      },
+    } as never);
+
+    expect(html).not.toContain('1000 bulan');
+    expect(html).toContain('Impas — belum ada laba');
+    expect(html).toContain('TITIK IMPAS');
+  });
+
+  it('should call a negative margin a shortfall, not a tolerance', () => {
+    // "Jarak aman (boleh meleset sampai) -66.7%" was nonsense.
+    const html = renderReportHtml({
+      ...(base as object),
+      analysis: {
+        financial: {
+          sensitivity: {
+            breakEvenCustomersPerDay: 25,
+            assumedCustomersPerDay: 15,
+            marginOfSafetyPercent: -66.7,
+            points: [
+              { customersPerDay: 15, monthlyRevenue: 19_500_000, operatingProfit: -3_125_000, paybackPeriodMonths: null, isViable: false, isAssumption: true, isBreakEven: false },
+            ],
+            notes: [],
+          },
+        },
+      },
+    } as never);
+
+    expect(html).toContain('Kekurangan terhadap titik impas');
+    expect(html).toContain('66.7% DI BAWAH titik impas');
+    expect(html).not.toContain('boleh meleset sampai</th>');
+  });
+
+  it('should list one shop once when Google holds two entries for it', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      competitors: [
+        { name: 'Novo Hill Laundry', category: 'laundry', distanceMeters: 592, rating: null, reviewCount: null },
+        { name: 'Novo Hill Laundry', category: 'laundry', distanceMeters: 592, rating: 5, reviewCount: 15 },
+        { name: 'Laundry Yuk', category: 'laundry', distanceMeters: 613, rating: 5, reviewCount: 3 },
+      ],
+    } as never);
+
+    expect(html.match(/Novo Hill Laundry/g)).toHaveLength(1);
+    expect(html).toContain('Laundry Yuk');
+  });
+
+  it('should write the enums in the language of the report', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      analysis: {
+        demand: { demandSignal: 'WEAK', confidence: 'MEDIUM' },
+        competition: { densityLevel: 'HIGH' },
+      },
+    } as never);
+
+    expect(html).toContain('Lemah');
+    expect(html).toContain('Tinggi');
+    expect(html).not.toContain('>WEAK');
+    expect(html).not.toContain('>HIGH');
+  });
+
+  it('should not claim the score is the average when it was capped', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      scoreBreakdown: [{ dimension: 'demand', score: 25, evidence: 'Sinyal permintaan lemah.' }],
+      analysis: {
+        scoring: {
+          overallScore: 30,
+          caps: ['Skor dibatasi maksimal 30 karena lokasi ini RUGI setiap bulan.'],
+        },
+      },
+    } as never);
+
+    expect(html).not.toContain('rata-rata sepuluh dimensi');
+    expect(html).toContain('LEBIH RENDAH dari rata-rata');
+  });
+
+  it('should judge the rent against the trade rather than printing a bare ratio', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      premises: {
+        name: 'Ruko Bella Casa',
+        address: 'Jl. Bella Casa Residence No.6',
+        propertyType: 'Ruko',
+        confidence: 'LOW',
+        cost: {
+          monthlyRent: 8_000_000, annualRent: 96_000_000, propertySizeSqm: 200,
+          rentPerSqm: 40_000, occupancyCostRatio: 41, estimatedLocationInvestment: null, missing: [],
+        },
+      },
+      occupancy: {
+        verdict: 'DANGEROUS',
+        message: 'PERINGATAN: sewa memakan 41% dari perkiraan pendapatan setahun, sementara kisaran sehat untuk laundry adalah 10-15%.',
+      },
+    } as never);
+
+    expect(html).toContain('kisaran sehat untuk laundry adalah 10-15%');
+  });
+
+  it('should name the sources whose licences require it', () => {
+    const html = renderReportHtml({
+      ...(base as object),
+      attributions: ['Data jalan © Kontributor OpenStreetMap (ODbL 1.0)'],
+    } as never);
+
+    expect(html).toContain('Sumber Data');
+    expect(html).toContain('OpenStreetMap');
+  });
+});

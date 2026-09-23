@@ -26,6 +26,7 @@ interface ReportShape {
   synthesis?: { executiveSummary?: string; assumptions?: string[] };
   analysis?: {
     financial?: { scenarios?: Scenario[]; inputs?: { averageTransaction?: number } };
+    marketGap?: { overallRecommendation?: string };
   };
   candidates?: { shortlistedCount?: number; shortlisted?: unknown[] };
 }
@@ -206,6 +207,25 @@ export function checkReportConsistency(
             `but the financial model used Rp ${usedTransaction.toLocaleString('id-ID')}.`,
         });
       }
+    }
+  }
+
+  // --- Calling a loss-making location a strong opportunity ---
+  //
+  // The two analyses are produced by different agents, and nothing stopped the
+  // market-gap agent from recommending a location the financial model had
+  // already shown loses money every month.
+  const recommendation = report.analysis?.marketGap?.overallRecommendation;
+  if (recommendation === 'STRONG_OPPORTUNITY' && scenarios.length > 0) {
+    const base = scenarios.find((s) => s.scenarioName === 'BASE');
+    if (base && base.isViable === false) {
+      issues.push({
+        code: 'RECOMMENDATION_CONTRADICTION',
+        message:
+          'The market gap analysis recommends STRONG_OPPORTUNITY while the BASE financial ' +
+          'scenario is loss-making. A location that does not cover its rent cannot be a strong ' +
+          'opportunity.',
+      });
     }
   }
 

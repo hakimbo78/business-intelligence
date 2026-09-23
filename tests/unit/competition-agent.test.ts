@@ -82,7 +82,9 @@ describe('Competition Agent', () => {
       expect.arrayContaining(['cafe']),
       expect.any(Number), // latitude
       expect.any(Number), // longitude
-      2000 // radius from research plan
+      // The radius comes from the trade profile — a cafe's catchment — not from
+      // the research plan, where a model invented a different number each run.
+      1500
     );
     
     // Verify database update was called

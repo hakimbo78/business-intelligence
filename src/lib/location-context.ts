@@ -49,10 +49,22 @@ export interface LocationContext {
   notMeasured: string[];
 }
 
+/**
+ * What this analysis still does not measure.
+ *
+ * Shortened as real sources replaced guesses: resident population now comes
+ * from WorldPop, road class and traffic direction from OpenStreetMap, and the
+ * competitor total from a tiled census rather than one capped search.
+ *
+ * What remains is what genuinely cannot be bought or modelled — and it stays
+ * printed, because a shrinking list is only honest if the leftovers are still
+ * named.
+ */
 export const NOT_MEASURED: string[] = [
-  'Jumlah penduduk, komposisi usia, dan tingkat pendapatan di sekitar lokasi — kami tidak memiliki sumber data demografi yang sah untuk dipakai komersial.',
-  'Jumlah orang atau kendaraan yang benar-benar melintas di depan properti. Ini hanya dapat diketahui dengan penghitungan langsung di lapangan.',
-  'Kepadatan usaha sejenis secara menyeluruh. Sumber peta membatasi hasil pencarian, sehingga jumlah pesaing yang kami tampilkan adalah yang terdekat, bukan seluruhnya.',
+  'Jumlah orang atau kendaraan yang benar-benar melintas di depan properti. Tidak ada sumber data yang sah untuk ini — hanya penghitungan langsung di lapangan.',
+  'Komposisi usia dan tingkat pendapatan penduduk. Kami mengukur jumlah penduduk, bukan siapa mereka.',
+  'Omzet, jumlah pelanggan, dan kekuatan masing-masing pesaing. Kami menghitung berapa banyak pesaingnya, bukan seberapa kuat.',
+  'Usaha yang tidak terdaftar di Google Maps — banyak usaha rumahan tidak terdaftar dan karenanya tidak terhitung.',
 ];
 
 /** Distance in metres between two coordinates. */

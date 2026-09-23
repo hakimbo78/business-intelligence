@@ -12,6 +12,17 @@ import {
   type RoadContext,
 } from '../lib/road-context.js';
 import { imageryService } from '../services/imagery.service.js';
+import { osmRoadService, OSM_ATTRIBUTION } from '../services/osm-road.service.js';
+import { populationService, WORLDPOP_ATTRIBUTION, type PopulationContext } from '../services/population.service.js';
+import type { OsmRoadContext } from '../lib/osm-road.js';
+import {
+  resolveTradeProfile,
+  describeTradeProfile,
+  assessOccupancy,
+  type TradeProfile,
+  type OccupancyAssessment,
+} from '../lib/trade-profile.js';
+import { assessMarketShare, type MarketShareRequirement } from '../lib/market-share.js';
 import type { LocationImagery } from '../lib/imagery.js';
 
 /**
@@ -78,6 +89,31 @@ export interface StructuredReport {
    * one down a gang are different businesses.
    */
   road: RoadContext | null;
+  /**
+   * The same question answered from OpenStreetMap, which knows things a name
+   * cannot reveal: the official class, the traffic direction, the surface.
+   * Null when OSM could not be reached.
+   */
+  osmRoad: OsmRoadContext | null;
+  /**
+   * The trade this business belongs to, and the assumptions that follow.
+   *
+   * Printed rather than applied silently: the radii and rent bands are retail
+   * rules of thumb, not measurements, and the client may replace them.
+   */
+  tradeProfile: {
+    label: string;
+    catchmentRadiusMeters: number;
+    notes: string[];
+  } | null;
+  /** Residents around the premises, from WorldPop. */
+  population: PopulationContext | null;
+  /** The share of the local market this business must win to break even. */
+  marketShare: MarketShareRequirement | null;
+  /** Whether the rent is survivable for this trade. */
+  occupancy: OccupancyAssessment | null;
+  /** Sources that require attribution by licence. */
+  attributions: string[];
   /**
    * How precisely the premises could be located.
    *
@@ -284,6 +320,48 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
         })
       : null;
 
+    // What kind of business this is decides how far its customers travel, which
+    // decides the catchment, which decides every market figure below.
+    const profile = resolveTradeProfile([
+      project.businessProfile?.businessCategory,
+      project.businessProfile?.businessSubcategory,
+    ]);
+
+    // A candidate without usable coordinates skips the external lookups rather
+    // than failing a report the client has already paid for.
+    const premisesPoint =
+      assessed && Number.isFinite(assessed.latitude) && Number.isFinite(assessed.longitude)
+        ? { latitude: assessed.latitude, longitude: assessed.longitude }
+        : null;
+
+    // Free sources, so both are attempted for every report; each degrades to
+    // null rather than failing the report.
+    const osmRoad = premisesPoint
+      ? await osmRoadService.describe(premisesPoint, {
+          preferredName: assessed?.geocodedRoadName,
+          projectId,
+        })
+      : null;
+
+    const population = premisesPoint
+      ? await populationService.describe(premisesPoint, profile.catchmentRadiusMeters, projectId)
+      : null;
+
+    const sensitivity = (project.financialAnalysis as any)?.sensitivity;
+    const competitionCount = (project.competitionAnalysis as any)?.count;
+
+    const marketShare =
+      sensitivity?.breakEvenCustomersPerDay !== undefined && population
+        ? assessMarketShare({
+            profile,
+            catchmentPopulation: population.catchmentPopulation,
+            competitorCount: competitionCount?.found ?? project.competitors.length,
+            competitorCountIsMinimum: competitionCount?.capped ?? false,
+            breakEvenCustomersPerDay: sensitivity.breakEvenCustomersPerDay,
+            operatingDays: project.businessProfile?.operatingDays ?? 26,
+          })
+        : null;
+
     const premises = assessed
       ? {
           name: assessed.name,
@@ -293,6 +371,13 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
           cost: summariseLocationCost(assessed, baseRevenue),
         }
       : null;
+
+    const occupancy = premises ? assessOccupancy(premises.cost.occupancyCostRatio, profile) : null;
+
+    const attributions = [
+      ...(osmRoad ? [OSM_ATTRIBUTION] : []),
+      ...(population && population.rings.length > 0 ? [WORLDPOP_ATTRIBUTION] : []),
+    ];
 
     // 4. Compile final structured report
     const reportData: StructuredReport = {
@@ -306,6 +391,16 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       disclaimer: REPORT_DISCLAIMER_EN,
       premises,
       road,
+      osmRoad,
+      tradeProfile: {
+        label: profile.label,
+        catchmentRadiusMeters: profile.catchmentRadiusMeters,
+        notes: describeTradeProfile(profile),
+      },
+      population,
+      marketShare,
+      occupancy,
+      attributions,
       precision,
       imagery,
       synthesis,

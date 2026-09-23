@@ -95,6 +95,10 @@ export interface CompetitionCount {
   nearestMeters: number | null;
   /** Whether the business category could be searched at all. */
   searchable: boolean;
+  /** Requests the census spent, for cost tracking. */
+  apiCalls?: number;
+  /** True when every crowded tile was searched to the bottom. */
+  censusComplete?: boolean;
 }
 
 /** Enough competitors inside the radius to call the market crowded. */
@@ -134,14 +138,27 @@ export function describeCompetition(count: CompetitionCount): string {
     );
   }
 
+  const nearest =
+    count.nearestMeters !== null
+      ? ` Yang terdekat hanya ${count.nearestMeters} m dari properti.`
+      : '';
+
   if (count.capped) {
     return (
-      `Kami menemukan ${count.found} usaha sejenis dalam radius ${km} km, dan itu adalah BATAS ` +
-      'maksimal hasil pencarian Google — jumlah sebenarnya lebih banyak lagi. Pasar di sini ' +
+      `Kami menghitung ${count.found} usaha sejenis dalam radius ${km} km, dan pencarian ` +
+      'terhenti sebelum selesai — jumlah sebenarnya LEBIH BANYAK dari angka ini. Pasar di sini ' +
       'sudah padat.' +
-      (count.nearestMeters !== null
-        ? ` Yang terdekat hanya ${count.nearestMeters} m dari properti.`
-        : '')
+      nearest
+    );
+  }
+
+  if (count.censusComplete && count.found >= HIGH_DENSITY_COUNT) {
+    return (
+      `Kami menghitung ${count.found} usaha sejenis dalam radius ${km} km dengan penyisiran ` +
+      'bertahap, bukan sekadar mengambil hasil teratas.' +
+      nearest +
+      ' Angka ini mencakup yang terdaftar di Google Maps; usaha rumahan yang tidak terdaftar ' +
+      'tidak terhitung.'
     );
   }
 
