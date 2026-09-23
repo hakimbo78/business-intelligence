@@ -209,6 +209,14 @@ export class GoogleMapsProvider implements LocationProvider {
   }
 
   async searchPlaces(params: SearchPlacesParams): Promise<ProviderResult<PlaceSummary[]>> {
+    // Same SKU boundary as the nearby search: the facility lookups ask "how far
+    // to the nearest school", which needs no rating, and eight of them per
+    // report on the Enterprise allowance would cap us at 124 reports a month
+    // rather than 625.
+    const fieldMask = params.includeRatings
+      ? PLACE_SUMMARY_FIELDS_WITH_RATINGS
+      : PLACE_SUMMARY_FIELDS;
+
     const body = await this.request<{ places?: PlaceResource[] }>(
       PLACES_SEARCH_URL,
       {
@@ -216,7 +224,7 @@ export class GoogleMapsProvider implements LocationProvider {
         headers: {
           'Content-Type': 'application/json',
           'X-Goog-Api-Key': this.key,
-          'X-Goog-FieldMask': PLACE_SUMMARY_FIELDS,
+          'X-Goog-FieldMask': fieldMask,
         },
         body: JSON.stringify({
           textQuery: params.query,
@@ -239,9 +247,7 @@ export class GoogleMapsProvider implements LocationProvider {
       },
       'searchPlaces',
       {
-        sku: isEnterpriseFieldMask(PLACE_SUMMARY_FIELDS_WITH_RATINGS)
-          ? 'TEXT_SEARCH_ENTERPRISE'
-          : 'TEXT_SEARCH_PRO',
+        sku: isEnterpriseFieldMask(fieldMask) ? 'TEXT_SEARCH_ENTERPRISE' : 'TEXT_SEARCH_PRO',
         projectId: params.projectId,
       }
     );

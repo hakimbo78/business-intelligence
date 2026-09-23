@@ -101,6 +101,8 @@ export interface SearchPlacesParams {
   query: string;
   /** Attributes the call's cost to a project, for the budget ceiling. */
   projectId?: string;
+  /** Ask for rating and review count, which costs the Enterprise SKU. */
+  includeRatings?: boolean;
   location: Coordinates;
   radiusMeters: number;
   type?: string;
