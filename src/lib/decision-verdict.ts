@@ -21,6 +21,7 @@
 import type { OccupancyAssessment } from './trade-profile.js';
 import type { MarketShareRequirement } from './market-share.js';
 import type { PrecisionLevel } from './road-context.js';
+import type { PlausibilityIssue } from './input-plausibility.js';
 
 export type Verdict = 'VALIDATE' | 'INVESTIGATE' | 'REJECT' | 'INSUFFICIENT_DATA';
 
@@ -72,6 +73,14 @@ export interface VerdictInputs {
   maxAffordableRent: number | null;
   /** True when the competitor census could not be completed. */
   competitorCountIsMinimum: boolean;
+  /**
+   * Figures the client supplied that sit far outside the trade's norms.
+   *
+   * These bind harder than anything else here. Every financial number in the
+   * report descends from those inputs, so a verdict computed on top of them is
+   * only as sound as they are.
+   */
+  plausibilityIssues?: PlausibilityIssue[];
 }
 
 /** Above this multiple of an average competitor's share, the target is a stretch. */
@@ -122,8 +131,13 @@ export function decideVerdict(input: VerdictInputs): DecisionVerdict {
     );
   }
 
-  if (input.occupancy?.verdict === 'DANGEROUS') {
+  if (input.occupancy?.verdict === 'DANGEROUS' || input.occupancy?.verdict === 'IMPLAUSIBLE') {
     reasons.push(input.occupancy.message);
+  }
+
+  const implausible = input.plausibilityIssues ?? [];
+  for (const issue of implausible) {
+    reasons.push(issue.message);
   }
 
   if (input.baseIsViable === false) {
@@ -167,6 +181,14 @@ export function decideVerdict(input: VerdictInputs): DecisionVerdict {
     );
   }
 
+  if (implausible.length > 0) {
+    conditions.push(
+      'Pastikan dulu angka-angka yang ditandai di atas — nilai transaksi rata-rata, jumlah ' +
+        'pelanggan per hari, margin kotor, dan sewa. Selama itu belum dipastikan, seluruh bagian ' +
+        'finansial laporan ini belum dapat dipakai untuk mengambil keputusan.'
+    );
+  }
+
   if (share && share.requiredTransactionsPerMonth > 0) {
     conditions.push(
       `Buktikan bahwa Anda bisa mencapai ${share.requiredTransactionsPerMonth.toLocaleString('id-ID')} ` +
@@ -195,8 +217,10 @@ export function decideVerdict(input: VerdictInputs): DecisionVerdict {
     (timesAverage !== null && timesAverage >= IMPLAUSIBLE_SHARE_MULTIPLE);
 
   const troubled =
+    implausible.length > 0 ||
     input.baseIsViable === false ||
     input.occupancy?.verdict === 'DANGEROUS' ||
+    input.occupancy?.verdict === 'IMPLAUSIBLE' ||
     (timesAverage !== null && timesAverage >= STRETCH_SHARE_MULTIPLE) ||
     input.precisionLevel === 'ROAD_ONLY' ||
     input.competitorCountIsMinimum;

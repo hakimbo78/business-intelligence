@@ -24,6 +24,11 @@ import {
 } from '../lib/trade-profile.js';
 import { assessMarketShare, type MarketShareRequirement } from '../lib/market-share.js';
 import { decideVerdict, type DecisionVerdict } from '../lib/decision-verdict.js';
+import {
+  checkInputPlausibility,
+  summarisePlausibility,
+  type PlausibilityIssue,
+} from '../lib/input-plausibility.js';
 import { reachabilityService } from '../services/reachability.service.js';
 import type { Reachability } from '../lib/isochrone.js';
 import type { LocationImagery } from '../lib/imagery.js';
@@ -122,6 +127,13 @@ export interface StructuredReport {
   marketShare: MarketShareRequirement | null;
   /** Whether the rent is survivable for this trade. */
   occupancy: OccupancyAssessment | null;
+  /**
+   * The client's own figures that sit far outside the trade's norms.
+   *
+   * Printed because every financial number descends from them. The report
+   * never changes them; it refuses to stay silent about them.
+   */
+  plausibility: { issues: PlausibilityIssue[]; summary: string | null } | null;
   /**
    * Whether this location is worth the cost of a field survey.
    *
@@ -396,6 +408,24 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
 
     const occupancy = premises ? assessOccupancy(premises.cost.occupancyCostRatio, profile) : null;
 
+    // The client's own figures get the same scrutiny as the data we fetch.
+    const financialInputs = (project.financialAnalysis as any)?.inputs ?? {};
+    const baseScenario = (project.financialAnalysis as any)?.scenarios?.find(
+      (s: any) => s.scenarioName === 'BASE'
+    );
+
+    const plausibilityIssues = premises
+      ? checkInputPlausibility({
+          profile,
+          averageTransaction: financialInputs.averageTransaction ?? null,
+          customersPerDay: financialInputs.customersPerDay ?? null,
+          occupancyRatioPercent: premises.cost.occupancyCostRatio,
+          paybackMonths:
+            baseScenario?.paybackPeriodMonths > 0 ? baseScenario.paybackPeriodMonths : null,
+          breakEvenCustomersPerDay: sensitivity?.breakEvenCustomersPerDay ?? null,
+        })
+      : [];
+
     // The verdict reads the measurements; it never asks the model.
     const decision = decideVerdict({
       baseIsViable:
@@ -407,6 +437,7 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       quotedRent: assessed?.estimatedRent ?? null,
       maxAffordableRent: sensitivity?.maxAffordableRent ?? null,
       competitorCountIsMinimum: competitionCount?.capped ?? false,
+      plausibilityIssues,
     });
 
     const attributions = [
@@ -436,6 +467,9 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
       reachability,
       marketShare,
       occupancy,
+      plausibility: premises
+        ? { issues: plausibilityIssues, summary: summarisePlausibility(plausibilityIssues) }
+        : null,
       decision,
       attributions,
       precision,

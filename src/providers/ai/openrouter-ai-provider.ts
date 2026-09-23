@@ -54,6 +54,11 @@ CRITICAL INSTRUCTIONS:
         body: JSON.stringify({
           model: env.OPENROUTER_MODEL,
           temperature: 0.1,
+          // Without this OpenRouter reserves the model's whole context window
+          // against the account balance — 65,536 tokens for a request whose
+          // answer is a small JSON object. A report failed mid-run because the
+          // balance could not cover a reservation it was never going to use.
+          max_tokens: env.OPENROUTER_MAX_TOKENS,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }

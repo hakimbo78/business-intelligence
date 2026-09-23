@@ -139,8 +139,15 @@ Provide a structured competition analysis.`;
     // It feeds a score that feeds a recommendation, so it is computed from the
     // count (DEVELOPMENT_RULES.md §13). The model's own reading is discarded:
     // asked to rate a list of one, it answered LOW for a market that was full.
+    // The counts are measured too, for the same reason the density is.
+    //
+    // The prompt already forbids inventing a split, and the model did it anyway:
+    // a Kemang report announced "100 of 827 are direct competitors" over a list
+    // where every entry had been matched by Google's own category for the trade.
     const analysis: CompetitionAnalysis = {
       ...aiAnalysis,
+      directCompetitorsCount: allCompetitors.length,
+      indirectCompetitorsCount: 0,
       densityLevel: densityFromCount(count),
       count,
       countExplanation: describeCompetition(count),

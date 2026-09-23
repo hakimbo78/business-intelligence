@@ -69,6 +69,9 @@ const envSchema = z.object({
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   OPENROUTER_API_KEY: z.string().min(1).optional(),
   OPENROUTER_MODEL: z.string().default('openai/gpt-4o-mini'),
+  // Caps both the cost and the balance OpenRouter reserves per call. Every
+  // structured output here is a small JSON object; 4,000 is generous.
+  OPENROUTER_MAX_TOKENS: z.coerce.number().int().positive().default(4_000),
 
   // CORS (required in production so the allow-list is never implicit)
   CORS_ALLOWED_ORIGINS: z.string().optional(),

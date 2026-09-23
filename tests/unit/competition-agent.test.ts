@@ -68,8 +68,10 @@ describe('Competition Agent', () => {
     expect(result.count?.found).toBe(2);
     expect(result.count?.searchable).toBe(true);
 
-    // The model still contributes its classification and prose.
-    expect(result.directCompetitorsCount).toBe(3);
+    // The counts come from the list, not the model: asked to classify twenty
+    // businesses of one type, it once answered "100 direct of 827".
+    expect(result.directCompetitorsCount).toBe(2);
+    expect(result.indirectCompetitorsCount).toBe(0);
     
     // Verify project service was called
     expect(projectService.getProject).toHaveBeenCalledWith('mock-project-id');

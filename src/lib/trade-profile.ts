@@ -65,6 +65,15 @@ export interface TradeProfile {
   visitsPerResidentPerMonth: number;
   /** What one transaction is called, for the report's own wording. */
   transactionNoun: string;
+  /**
+   * What one transaction typically costs, in rupiah.
+   *
+   * Not used to compute anything — only to notice when a client's own figure
+   * falls far outside it. A cafe report once carried an average transaction of
+   * Rp 150,000, which produced a break-even of 8 customers a day and a payback
+   * of 1.3 months, and nothing in the system questioned it.
+   */
+  typicalTransaction: { min: number; max: number };
   /** Dimension weights. 1 is neutral; the calculator normalises. */
   weights: Partial<Record<ScoreDimension, number>>;
   /** Stated in the report, so the client can argue with the assumptions. */
@@ -94,6 +103,7 @@ const PROFILES: Array<TradeProfile & { match: RegExp }> = [
     healthyOccupancy: { min: 0.1, max: 0.15 },
     visitsPerResidentPerMonth: 0.3,
     transactionNoun: 'transaksi cucian',
+    typicalTransaction: { min: 10_000, max: 80_000 },
     weights: { competition: 2, demand: 2, financial_fit: 2, accessibility: 0.5 },
     basis:
       'Laundry kiloan dilayani dari jarak dekat: pelanggan membawa cucian ke tempat terdekat ' +
@@ -109,6 +119,7 @@ const PROFILES: Array<TradeProfile & { match: RegExp }> = [
     healthyOccupancy: { min: 0.08, max: 0.12 },
     visitsPerResidentPerMonth: 6,
     transactionNoun: 'transaksi belanja',
+    typicalTransaction: { min: 10_000, max: 100_000 },
     weights: { competition: 2, demand: 2, financial_fit: 2, accessibility: 0.5 },
     basis:
       'Toko kebutuhan sehari-hari dilayani dari radius sangat dekat dan dikunjungi berkali-kali ' +
@@ -123,6 +134,7 @@ const PROFILES: Array<TradeProfile & { match: RegExp }> = [
     healthyOccupancy: { min: 0.1, max: 0.15 },
     visitsPerResidentPerMonth: 0.35,
     transactionNoun: 'potong rambut',
+    typicalTransaction: { min: 15_000, max: 150_000 },
     weights: { competition: 1.5, demand: 1.5, financial_fit: 2, accessibility: 0.5 },
     basis:
       'Potong rambut dilakukan sekitar sebulan sekali dan orang memilih tempat dekat rumah ' +
@@ -137,6 +149,7 @@ const PROFILES: Array<TradeProfile & { match: RegExp }> = [
     healthyOccupancy: { min: 0.12, max: 0.18 },
     visitsPerResidentPerMonth: 0.15,
     transactionNoun: 'kunjungan perawatan',
+    typicalTransaction: { min: 50_000, max: 500_000 },
     weights: { competition: 1.5, financial_fit: 2, accessibility: 1 },
     basis:
       'Pelanggan salon bersedia menempuh jarak lebih jauh untuk tempat yang cocok, sehingga ' +
@@ -151,6 +164,7 @@ const PROFILES: Array<TradeProfile & { match: RegExp }> = [
     healthyOccupancy: { min: 0.15, max: 0.2 },
     visitsPerResidentPerMonth: 1.5,
     transactionNoun: 'transaksi',
+    typicalTransaction: { min: 15_000, max: 80_000 },
     weights: { competition: 1.5, demand: 2, financial_fit: 2, accessibility: 1 },
     basis:
       'Kedai kopi hidup dari orang yang sedang beraktivitas di sekitarnya — pekerja kantor dan ' +
@@ -165,6 +179,7 @@ const PROFILES: Array<TradeProfile & { match: RegExp }> = [
     healthyOccupancy: { min: 0.08, max: 0.12 },
     visitsPerResidentPerMonth: 2,
     transactionNoun: 'transaksi',
+    typicalTransaction: { min: 15_000, max: 150_000 },
     weights: { competition: 1.5, demand: 1.5, financial_fit: 2, accessibility: 1.5 },
     basis:
       'Tempat makan menarik pelanggan dari jarak yang lebih jauh, dan akses serta parkir ikut ' +
@@ -179,6 +194,7 @@ const PROFILES: Array<TradeProfile & { match: RegExp }> = [
     healthyOccupancy: { min: 0.08, max: 0.12 },
     visitsPerResidentPerMonth: 0.5,
     transactionNoun: 'transaksi',
+    typicalTransaction: { min: 15_000, max: 200_000 },
     weights: { competition: 1.5, demand: 1.5, financial_fit: 2 },
     basis:
       'Apotek sangat dipengaruhi kedekatan dengan klinik dan rumah sakit, karena sebagian besar ' +
@@ -193,6 +209,7 @@ const PROFILES: Array<TradeProfile & { match: RegExp }> = [
     healthyOccupancy: { min: 0.08, max: 0.12 },
     visitsPerResidentPerMonth: 0.2,
     transactionNoun: 'kendaraan dilayani',
+    typicalTransaction: { min: 30_000, max: 1_500_000 },
     weights: { competition: 1.5, financial_fit: 2, accessibility: 2 },
     basis:
       'Pelanggan datang berkendara, sehingga jangkauannya luas dan letak terhadap jalan yang ' +
@@ -207,6 +224,7 @@ const PROFILES: Array<TradeProfile & { match: RegExp }> = [
     healthyOccupancy: { min: 0.15, max: 0.25 },
     visitsPerResidentPerMonth: 0.05,
     transactionNoun: 'anggota baru',
+    typicalTransaction: { min: 150_000, max: 800_000 },
     weights: { competition: 1.5, demand: 1.5, financial_fit: 2, accessibility: 1.5 },
     basis:
       'Keanggotaan gym dibeli bulanan oleh sebagian kecil penduduk, dan orang bersedia menempuh ' +
@@ -221,6 +239,7 @@ const PROFILES: Array<TradeProfile & { match: RegExp }> = [
     healthyOccupancy: { min: 0.08, max: 0.12 },
     visitsPerResidentPerMonth: 0.2,
     transactionNoun: 'transaksi',
+    typicalTransaction: { min: 30_000, max: 1_000_000 },
     weights: { competition: 1.5, financial_fit: 2, accessibility: 1.5 },
     basis:
       'Toko ritel barang tahan lama dikunjungi jarang, dan pembeli membandingkan beberapa ' +
@@ -243,6 +262,7 @@ export const GENERIC_PROFILE: TradeProfile = {
   healthyOccupancy: { min: 0.1, max: 0.15 },
   visitsPerResidentPerMonth: 0.5,
   transactionNoun: 'transaksi',
+  typicalTransaction: { min: 10_000, max: 1_000_000 },
   weights: {},
   basis:
     'Jenis usaha Anda belum ada dalam daftar profil kami, sehingga laporan ini memakai profil ' +
@@ -269,7 +289,15 @@ export function describeTradeProfile(profile: TradeProfile): string[] {
   ];
 }
 
-export type OccupancyVerdict = 'HEALTHY' | 'TIGHT' | 'DANGEROUS' | 'UNKNOWN';
+export type OccupancyVerdict = 'HEALTHY' | 'TIGHT' | 'DANGEROUS' | 'IMPLAUSIBLE' | 'UNKNOWN';
+
+/**
+ * How far below the healthy floor counts as implausible rather than cheap.
+ *
+ * A genuinely cheap lease is a third of the floor at worst; below that, the
+ * revenue side of the ratio is the part that is wrong.
+ */
+const IMPLAUSIBLY_LOW_DIVISOR = 3;
 
 export interface OccupancyAssessment {
   verdict: OccupancyVerdict;
@@ -295,6 +323,21 @@ export function assessOccupancy(
       verdict: 'UNKNOWN',
       message:
         'Rasio biaya sewa terhadap pendapatan tidak dapat dihitung karena datanya belum lengkap.',
+    };
+  }
+
+  // Far BELOW the band is not health. A cafe paying 0.9% of revenue in rent
+  // means the revenue estimate is about seventeen times what that rent implies,
+  // and the report once called that "masih wajar". Only the ceiling was checked.
+  if (ratioPercent < min / IMPLAUSIBLY_LOW_DIVISOR) {
+    return {
+      verdict: 'IMPLAUSIBLE',
+      message:
+        `Sewa hanya memakan ${ratioPercent}% dari perkiraan pendapatan setahun, sementara untuk ` +
+        `${profile.label.toLowerCase()} angka yang wajar ${min}-${max}%. Ini BUKAN pertanda sehat — ` +
+        'justru pertanda perkiraan pendapatan Anda terlalu tinggi untuk sewa sebesar ini. ' +
+        'Periksa ulang jumlah pelanggan per hari dan nilai transaksi rata-rata sebelum memakai ' +
+        'angka mana pun di laporan ini.',
     };
   }
 

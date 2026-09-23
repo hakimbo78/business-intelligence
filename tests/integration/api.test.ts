@@ -184,7 +184,9 @@ describe('API Integration Tests', () => {
     // the AI provider returned.
     expect(data.densityLevel).toBe('LOW');
     expect(data.countExplanation).toContain('tidak terdaftar tidak terhitung');
-    expect(data.directCompetitorsCount).toBe(3);
+    // Counted from the list, not taken from the model.
+    expect(data.directCompetitorsCount).toBe(2);
+    expect(data.indirectCompetitorsCount).toBe(0);
 
     // Verify it was saved to the DB
     const dbProject = await prisma.project.findUnique({

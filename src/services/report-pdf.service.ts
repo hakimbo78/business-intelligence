@@ -175,6 +175,24 @@ function capsSection(report: StructuredReport): string {
 }
 
 /**
+ * The client's own figures, where they look wrong.
+ *
+ * Placed immediately before the financial scenarios, because that is where the
+ * reader is about to take them seriously.
+ */
+function plausibilitySection(report: StructuredReport): string {
+  const plausibility = report.plausibility;
+  if (!plausibility || plausibility.issues.length === 0) return '';
+
+  return `
+      <div class="alert">
+        <strong>Periksa dulu angka yang Anda masukkan</strong>
+        <p style="margin:8px 0">${esc(plausibility.summary)}</p>
+        <ul>${plausibility.issues.map((i) => `<li>${esc(i.message)}</li>`).join('')}</ul>
+      </div>`;
+}
+
+/**
  * The decision, before anything else on the page.
  *
  * Everything below it is the working. A reader who stops after this box should
@@ -429,6 +447,18 @@ function roadSection(report: StructuredReport): string {
       : road.indicatedClass === 'ALLEY' ? '#e74c3c'
       : '#7f8c8d';
 
+  // The name-based reading disclaims what it cannot see. When OpenStreetMap has
+  // just printed the width, surface and traffic direction in the table above,
+  // repeating that disclaimer makes the section contradict itself — which is
+  // exactly what the Kemang report did.
+  // Older reports carry no OSM section at all, so the field may be absent
+  // rather than null.
+  const osmAnsweredIt = Boolean(report.osmRoad && report.osmRoad.carAccessible !== null);
+
+  const roadNotes = osmAnsweredIt
+    ? road.notes.filter((n) => !n.includes('TIDAK dapat melihat lebar jalan'))
+    : road.notes;
+
   return `
       <h2>7. Jenis Jalan &amp; Akses</h2>
       <table>
@@ -460,8 +490,8 @@ function roadSection(report: StructuredReport): string {
       }
       ${imageryNotes(report)}
       ${
-        road.notes.length > 0
-          ? `<div class="warning"><ul>${road.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`
+        roadNotes.length > 0
+          ? `<div class="warning"><ul>${roadNotes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`
           : ''
       }`;
 }
@@ -836,6 +866,8 @@ export function renderReportHtml(report: StructuredReport): string {
         <strong>Teridentifikasi:</strong> ${esc(report.candidates?.totalIdentified)} &nbsp;|&nbsp;
         <strong>Masuk daftar pendek:</strong> ${esc(report.candidates?.shortlistedCount)}
       </div>
+
+      ${plausibilitySection(report)}
 
       <h2>10. Skenario Finansial</h2>
       <table>
