@@ -30,6 +30,14 @@ export type CompetitionAnalysis = z.infer<typeof competitionAnalysisSchema> & {
   countExplanation?: string;
 };
 
+/**
+ * Competitors described to the model.
+ *
+ * Enough to characterise the field — names, categories, how close they sit —
+ * without pasting a census into a prompt.
+ */
+const COMPETITOR_SAMPLE_SIZE = 30;
+
 export class CompetitionAgent {
   private aiProvider = createAIProvider(env.AI_PROVIDER);
   private locationProvider = createLocationProvider(env.MAP_PROVIDER);
@@ -98,8 +106,18 @@ export class CompetitionAgent {
     const allCompetitors = search.competitors;
     const count = search.count;
 
-    // 4. Analyze and classify competitors with AI
-    const competitorSummary = allCompetitors.map(c => ({ name: c.name, category: c.category }));
+    // 4. Have the model write the prose. The numbers are already settled.
+    // Only a sample reaches the model.
+    //
+    // The census now finds hundreds — 898 for one Depok restaurant — and the
+    // whole list used to be serialised into the prompt. That is roughly 27,000
+    // tokens of JSON for a reasoning model to read before it writes three
+    // paragraphs, which made a report appear to hang. Nothing was lost by
+    // trimming it: the counts and the density are computed below from the
+    // census, and the model is only writing the prose.
+    const competitorSample = allCompetitors
+      .slice(0, COMPETITOR_SAMPLE_SIZE)
+      .map((c) => ({ name: c.name, category: c.category, distanceMeters: c.distanceMeters }));
 
     const prompt = `You are a Competition Analyst Agent.
 
@@ -110,12 +128,12 @@ Do not split the list evenly to look balanced: the previous version reported
 "10 direct and 10 indirect" for twenty businesses that were all the same type,
 which was invented.
 
-COUNTING RULE — the list below is ALL you may count.
-It contains exactly ${competitorSummary.length} businesses. directCompetitorsCount plus
-indirectCompetitorsCount must add up to ${competitorSummary.length}, and neither may
-exceed it. Do not estimate a wider market: the map source caps results, so this list
-is the nearest businesses, not every business in the area. Say that in the summary
-rather than inventing a total.
+COUNTING RULE — do not count anything yourself.
+The census already counted ${count.found} similar businesses within ${searchRadiusMeters} m,
+the nearest ${count.nearestMeters ?? 'unknown'} m away${count.capped ? ' (and it stopped before finishing, so the real total is higher)' : ''}.
+Those figures are authoritative and are filled in after you answer, so any number you
+write for directCompetitorsCount or indirectCompetitorsCount is discarded. Use
+${count.found} in your prose and never a figure of your own.
 Write every free-text field in Indonesian (Bahasa Indonesia); the reader is an Indonesian business owner. Enum values stay in English.
 Analyze the following business profile and the discovered competitors in its target area.
 Classify the density of the market (LOW, MEDIUM, HIGH) and identify direct vs indirect competitors.
@@ -123,8 +141,8 @@ Classify the density of the market (LOW, MEDIUM, HIGH) and identify direct vs in
 BUSINESS PROFILE:
 ${JSON.stringify(project.businessProfile, null, 2)}
 
-DISCOVERED COMPETITORS:
-${JSON.stringify(competitorSummary, null, 2)}
+NEAREST COMPETITORS (a sample of ${competitorSample.length} out of ${count.found}, closest first):
+${JSON.stringify(competitorSample, null, 2)}
 
 Provide a structured competition analysis.`;
 

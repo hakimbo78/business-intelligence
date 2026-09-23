@@ -66,7 +66,11 @@ CRITICAL INSTRUCTIONS:
             { role: "user", content: prompt }
           ],
           response_format: { type: "json_object" }
-        })
+        }),
+        // Without this a stalled call hangs the whole pipeline, and the order
+        // sits at PROCESSING with nothing to show anyone. A reasoning model on
+        // a long prompt is slow, so the ceiling is generous rather than tight.
+        signal: AbortSignal.timeout(env.AI_REQUEST_TIMEOUT_MS),
       });
 
       if (!response.ok) {

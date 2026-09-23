@@ -95,7 +95,7 @@ const SIGNATURES: Array<{ code: string; kind: FailureKind; test: RegExp; message
   {
     code: 'UPSTREAM_TIMEOUT',
     kind: 'RETRYABLE',
-    test: /timeout|ETIMEDOUT|ECONNRESET|socket hang up|50[234]/i,
+    test: /timeout|TimeoutError|aborted|ETIMEDOUT|ECONNRESET|socket hang up|50[234]/i,
     message: 'Layanan luar tidak merespons tepat waktu. Sistem akan mencoba lagi secara otomatis.',
   },
 ];

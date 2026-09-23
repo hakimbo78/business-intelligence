@@ -72,6 +72,8 @@ const envSchema = z.object({
   // Caps both the cost and the balance OpenRouter reserves per call. Every
   // structured output here is a small JSON object; 4,000 is generous.
   OPENROUTER_MAX_TOKENS: z.coerce.number().int().positive().default(4_000),
+  // A stalled LLM call would otherwise hold a report open indefinitely.
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
 
   // CORS (required in production so the allow-list is never implicit)
   CORS_ALLOWED_ORIGINS: z.string().optional(),
