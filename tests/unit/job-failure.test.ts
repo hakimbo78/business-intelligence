@@ -62,3 +62,30 @@ describe('Deciding whether to try again', () => {
     expect(classifyFailure(null).kind).toBe('RETRYABLE');
   });
 });
+
+describe('Failures that come from how the AI is configured', () => {
+  it('should not retry a model that cannot serve this endpoint', () => {
+    // The real message, after the model was set to a ":batch" variant.
+    const error = new Error(
+      'OpenRouter API Error: 404 {"error":{"message":"z-ai/glm-5.3-flash:batch cannot be used ' +
+        'with the chat/completions endpoint (adapter DeepInfraBatchAdapter)"}}'
+    );
+
+    const failure = classifyFailure(error);
+    expect(failure.kind).toBe('PERMANENT');
+    expect(failure.code).toBe('AI_MODEL_INVALID');
+    expect(failure.message).toContain(':batch');
+  });
+
+  it('should not retry a model that thinks until its budget is gone', () => {
+    const error = new Error(
+      'OpenRouter returned no answer: the model spent its whole budget of 4000 tokens reasoning ' +
+        '(3980 used) without writing one.'
+    );
+
+    const failure = classifyFailure(error);
+    expect(failure.kind).toBe('PERMANENT');
+    expect(failure.code).toBe('AI_TOKEN_BUDGET');
+    expect(failure.message).toContain('OPENROUTER_MAX_TOKENS');
+  });
+});

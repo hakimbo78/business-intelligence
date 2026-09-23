@@ -44,6 +44,24 @@ const SIGNATURES: Array<{ code: string; kind: FailureKind; test: RegExp; message
       'ulang analisis.',
   },
   {
+    code: 'AI_MODEL_INVALID',
+    kind: 'PERMANENT',
+    test: /cannot be used with the chat\/completions endpoint|is not a valid model|No endpoints found|404/i,
+    message:
+      'Model AI yang dikonfigurasi tidak dapat dipakai. Periksa OPENROUTER_MODEL — pastikan ' +
+      'nama modelnya benar dan tanpa akhiran seperti ":batch", yang memakai endpoint berbeda. ' +
+      'Setelah diperbaiki, jalankan ulang analisis.',
+  },
+  {
+    code: 'AI_TOKEN_BUDGET',
+    kind: 'PERMANENT',
+    test: /spent its whole budget of \d+ tokens reasoning|returned no content/i,
+    message:
+      'Model AI menghabiskan seluruh jatah token untuk berpikir tanpa menghasilkan jawaban. ' +
+      'Naikkan OPENROUTER_MAX_TOKENS, atau pakai model yang tidak melakukan reasoning panjang, ' +
+      'lalu jalankan ulang analisis.',
+  },
+  {
     code: 'BUDGET_CEILING',
     kind: 'PERMANENT',
     test: /BudgetExceededError|Batas biaya/i,

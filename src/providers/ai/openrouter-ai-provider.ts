@@ -6,7 +6,9 @@ import { z } from 'zod';
 
 /** Minimal shape of the OpenAI-compatible chat completion response. */
 interface ChatCompletionResponse {
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+  /** Reasoning models report the tokens they spent thinking separately. */
+  usage?: { completion_tokens_details?: { reasoning_tokens?: number } };
 }
 
 export class OpenRouterAIProvider implements AIProvider {
@@ -79,7 +81,21 @@ CRITICAL INSTRUCTIONS:
       content = content.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
 
       if (!content) {
-        throw new Error('No content returned from OpenRouter');
+        // A reasoning model can spend the whole token budget thinking and
+        // return an empty answer: glm-5.3-flash used 1,295 reasoning tokens to
+        // produce 113 of content. Saying which it was turns a mystifying parse
+        // failure into an actionable one.
+        const finishReason = data.choices?.[0]?.finish_reason;
+        const reasoningTokens = data.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
+
+        throw new Error(
+          reasoningTokens > 0
+            ? `OpenRouter returned no answer: the model spent its whole budget of ` +
+              `${env.OPENROUTER_MAX_TOKENS} tokens reasoning (${reasoningTokens} used) without ` +
+              `writing one. Raise OPENROUTER_MAX_TOKENS or choose a model that does not reason ` +
+              `before answering. (finish_reason: ${finishReason})`
+            : `OpenRouter returned no content (finish_reason: ${finishReason}).`
+        );
       }
 
       let parsed = JSON.parse(content);
