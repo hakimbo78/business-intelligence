@@ -9,6 +9,8 @@ import {
   type NearestFacility,
 } from '../lib/location-context.js';
 import { logger } from '../lib/logger.js';
+import { chooseFacility } from '../lib/facility-validation.js';
+import { resolveTradeProfile, type TradeProfile } from '../lib/trade-profile.js';
 
 /** Far enough that "nothing found" means something, close enough to matter. */
 const SEARCH_RADIUS_METERS = 3000;
@@ -25,8 +27,10 @@ export class LocationContextService {
 
   async describe(
     location: { latitude: number; longitude: number },
-    projectId?: string
+    projectId?: string,
+    profile?: TradeProfile
   ): Promise<LocationContext> {
+    const trade = profile ?? resolveTradeProfile([]);
     const facilities: NearestFacility[] = [];
 
     for (const facility of CATCHMENT_FACILITIES) {
@@ -46,22 +50,37 @@ export class LocationContextService {
           });
         }
 
-        // Only the nearest matters. Counts are capped by the provider, so a
-        // tally here would be a ceiling rather than a measurement.
-        const nearest = result.data
+        // The nearest result is often not the facility at all: the provider
+        // returned a vet as the nearest hospital and a road as the nearest
+        // station. So every candidate is checked by name and the nearest
+        // plausible one wins (see facility-validation.ts). Counts are capped by
+        // the provider, so a tally here would be a ceiling, not a measurement.
+        const candidates = result.data
+          .filter((p) => p.name)
           .map((p) => ({
             name: p.name,
-            distance: Math.round(
+            distanceMeters: Math.round(
               distanceMeters(location.latitude, location.longitude, p.location.latitude, p.location.longitude)
             ),
-          }))
-          .sort((a, b) => a.distance - b.distance)[0];
+          }));
+
+        const chosen = chooseFacility(facility.key, candidates);
+
+        if (chosen.rejected > 0) {
+          logger.info(
+            { projectId, facility: facility.key, rejected: chosen.rejected, chosen: chosen.name },
+            'Discarded map results whose names contradict their category'
+          );
+        }
 
         facilities.push({
           key: facility.key,
           label: facility.label,
-          distanceMeters: nearest?.distance ?? null,
-          name: nearest?.name ?? null,
+          distanceMeters: chosen.distanceMeters,
+          name: chosen.name,
+          confidence: chosen.confidence,
+          rejected: chosen.rejected,
+          isDemandDriver: trade.demandDrivers.includes(facility.key),
         });
       } catch (error) {
         // One facility type failing must not lose the whole catchment.
@@ -74,6 +93,9 @@ export class LocationContextService {
           label: facility.label,
           distanceMeters: null,
           name: null,
+          confidence: 'UNVERIFIED',
+          rejected: 0,
+          isDemandDriver: trade.demandDrivers.includes(facility.key),
         });
       }
     }
@@ -82,6 +104,7 @@ export class LocationContextService {
       {
         projectId,
         found: facilities.filter((f) => f.distanceMeters !== null).length,
+        confirmed: facilities.filter((f) => f.confidence === 'CONFIRMED').length,
         of: facilities.length,
       },
       'Established location catchment'

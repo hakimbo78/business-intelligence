@@ -6,6 +6,7 @@ import { createLocationProvider } from '../providers/location/index.js';
 import { locationContextService } from '../services/location-context.service.js';
 import { describeCatchment, type LocationContext } from '../lib/location-context.js';
 import { logger } from '../lib/logger.js';
+import { resolveTradeProfile } from '../lib/trade-profile.js';
 import { prisma } from '../config/database.js';
 
 export const demandAnalysisSchema = z.object({
@@ -43,8 +44,23 @@ export class DemandAgent {
     // figures for every location on earth — "dominant age group 25-34" was
     // printed in customer reports as a finding about their own neighbourhood.
     // Distances to real facilities can at least be verified on foot.
-    const geocoded = await this.locationProvider.geocode({ address: targetArea });
-    const context = await locationContextService.describe(geocoded.data.location, projectId);
+    //
+    // Centred on the premises when the client named one: geocoding a road name
+    // returns its midpoint, which on a long road is a different neighbourhood.
+    const premises = project.candidates?.[0] ?? null;
+    const centre =
+      premises && Number.isFinite(premises.latitude) && Number.isFinite(premises.longitude)
+        ? { latitude: premises.latitude, longitude: premises.longitude }
+        : (await this.locationProvider.geocode({ address: targetArea })).data.location;
+
+    // The trade decides which facilities count as demand drivers: a campus
+    // matters to a laundry, an office district to a cafe.
+    const profile = resolveTradeProfile([
+      project.businessProfile.businessCategory,
+      project.businessProfile.businessSubcategory,
+    ]);
+
+    const context = await locationContextService.describe(centre, projectId, profile);
 
     // 3. Prepare AI prompt
     const prompt = `You are a Demand Analyst Agent for a Location Decision Intelligence platform.

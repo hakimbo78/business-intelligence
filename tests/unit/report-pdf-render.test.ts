@@ -154,7 +154,7 @@ describe('Location context in the report', () => {
     expect(html).toContain('992 m');
     expect(html).toContain('SDN Depok 1');
     // An absent facility is a finding, not an omission.
-    expect(html).toContain('tidak ada dalam 3000 m');
+    expect(html).toContain('tidak ditemukan');
     // And the limits of the evidence are stated to the customer.
     expect(html).toContain('Yang TIDAK kami ukur');
     expect(html).toContain('Jumlah penduduk dan komposisi usia tidak diukur.');

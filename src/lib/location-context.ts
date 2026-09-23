@@ -12,6 +12,8 @@
  * counting", which is not a density measure and must not be presented as one.
  */
 
+import type { FacilityConfidence } from './facility-validation.js';
+
 /** Facility types that generate passing trade, with the words a client uses. */
 export const CATCHMENT_FACILITIES = [
   { key: 'school', types: ['school'], label: 'Sekolah' },
@@ -32,6 +34,18 @@ export interface NearestFacility {
   /** Null when nothing of this type was found within the search radius. */
   distanceMeters: number | null;
   name: string | null;
+  /**
+   * Whether the name supports the category the map assigned.
+   *
+   * Every source tested mislabels Indonesian POIs — a vet returned as the
+   * nearest hospital, a road as the nearest station — so a distance is only
+   * worth printing alongside how far we trust it (see facility-validation.ts).
+   */
+  confidence: FacilityConfidence;
+  /** Candidates the name check ruled out before this one was chosen. */
+  rejected: number;
+  /** True when this facility generates demand for the client's own trade. */
+  isDemandDriver: boolean;
 }
 
 export interface LocationContext {
@@ -92,10 +106,14 @@ export function distanceMeters(
  */
 export function describeCatchment(context: LocationContext): string {
   return context.facilities
-    .map((f) =>
-      f.distanceMeters === null
-        ? `${f.label}: tidak ada dalam radius ${context.searchRadiusMeters} m`
-        : `${f.label}: ${f.distanceMeters} m${f.name ? ` (${f.name})` : ''}`
-    )
+    .map((f) => {
+      if (f.distanceMeters === null) {
+        return `${f.label}: tidak ditemukan yang meyakinkan dalam radius ${context.searchRadiusMeters} m`;
+      }
+
+      const caveat = f.confidence === 'CONFIRMED' ? '' : ' [belum terverifikasi]';
+      const driver = f.isDemandDriver ? ' [pemicu permintaan untuk usaha ini]' : '';
+      return `${f.label}: ${f.distanceMeters} m${f.name ? ` (${f.name})` : ''}${caveat}${driver}`;
+    })
     .join('\n');
 }

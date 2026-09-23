@@ -54,6 +54,14 @@ describe('Density from the count', () => {
   it('should refuse to rate a business it could not search for', () => {
     expect(densityFromCount({ ...base, searchable: false })).toBe('UNKNOWN');
   });
+
+  it('should not call a failed search a crowded market', () => {
+    // An API quota once returned nothing, and the capped flag alone made the
+    // report announce HIGH density over an empty list.
+    expect(densityFromCount({ ...base, found: 0, capped: true })).toBe('UNKNOWN');
+    expect(describeCompetition({ ...base, found: 0, capped: true })).toContain('TIDAK diketahui');
+    expect(describeCompetition({ ...base, found: 0, capped: true })).toContain('Jangan membaca ini sebagai pasar yang kosong');
+  });
 });
 
 describe('Explaining the count', () => {

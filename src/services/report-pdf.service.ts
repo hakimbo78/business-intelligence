@@ -69,20 +69,35 @@ function locationContextSection(report: StructuredReport): string {
   const context = (report.analysis as any)?.demand?.locationContext;
   if (!context?.facilities?.length) return '';
 
-  const rows = context.facilities
+  // Demand drivers first: the facilities that matter to THIS trade are the
+  // reason the table exists, and the rest is context.
+  const ordered = [...context.facilities].sort(
+    (a: any, b: any) => Number(b.isDemandDriver) - Number(a.isDemandDriver)
+  );
+
+  const rows = ordered
     .map(
       (f: any) => `
-            <tr>
-              <td>${esc(f.label)}</td>
+            <tr${f.isDemandDriver ? ' style="background:#eaf4fb"' : ''}>
+              <td>${esc(f.label)}${f.isDemandDriver ? ' <strong>&bull;</strong>' : ''}</td>
               <td>${
                 f.distanceMeters === null
-                  ? `<em>tidak ada dalam ${context.searchRadiusMeters} m</em>`
+                  ? `<em>tidak ditemukan</em>`
                   : `${f.distanceMeters} m`
               }</td>
               <td>${f.name ? esc(f.name) : '—'}</td>
+              <td>${
+                f.confidence === 'CONFIRMED'
+                  ? 'Terverifikasi'
+                  : f.confidence === 'REJECTED'
+                    ? `<em>Tidak ada yang meyakinkan${f.rejected ? ` (${f.rejected} hasil ditolak)` : ''}</em>`
+                    : '<em>Belum terverifikasi</em>'
+              }</td>
             </tr>`
     )
     .join('');
+
+  const unconfirmed = context.facilities.filter((f: any) => f.confidence !== 'CONFIRMED').length;
 
   const notMeasured = (context.notMeasured ?? [])
     .map((n: string) => `<li>${esc(n)}</li>`)
@@ -91,13 +106,25 @@ function locationContextSection(report: StructuredReport): string {
   return `
       <h2>6. Konteks Lokasi</h2>
       <p class="note">
-        Jarak ke fasilitas terdekat, diukur dari titik properti. Semua angka ini
-        dapat Anda periksa sendiri di lapangan.
+        Jarak ke fasilitas terdekat, diukur dari titik properti. Baris bertanda &bull; adalah
+        fasilitas yang menjadi pemicu permintaan untuk jenis usaha Anda. Semua angka ini dapat
+        Anda periksa sendiri di lapangan.
       </p>
       <table>
-        <thead><tr><th>Fasilitas</th><th>Jarak terdekat</th><th>Nama</th></tr></thead>
+        <thead><tr><th>Fasilitas</th><th>Jarak</th><th>Nama</th><th>Status</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      ${
+        unconfirmed > 0
+          ? `<p class="note">
+        ${unconfirmed} dari ${context.facilities.length} baris belum terverifikasi. Sumber peta
+        sering salah menandai jenis tempat di Indonesia &mdash; klinik hewan tercatat sebagai rumah
+        sakit, nama jalan tercatat sebagai stasiun. Kami memeriksa nama setiap hasil dan membuang
+        yang jelas keliru, tetapi nama yang tidak menjelaskan jenisnya tetap kami tandai apa adanya
+        daripada kami tebak.
+      </p>`
+          : ''
+      }
       ${
         notMeasured
           ? `<div class="warning">

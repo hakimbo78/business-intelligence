@@ -113,6 +113,13 @@ const MEDIUM_DENSITY_COUNT = 4;
  */
 export function densityFromCount(count: CompetitionCount): CompetitionDensity {
   if (!count.searchable) return 'UNKNOWN';
+
+  // A census that ended without finding anything did not find an empty market;
+  // it failed. Reading that as "padat" is the mirror of the bug this module was
+  // written to fix — an API quota once produced 0 competitors and HIGH density
+  // in the same breath.
+  if (count.capped && count.found === 0) return 'UNKNOWN';
+
   if (count.capped || count.found >= HIGH_DENSITY_COUNT) return 'HIGH';
   if (count.found >= MEDIUM_DENSITY_COUNT) return 'MEDIUM';
   return 'LOW';
@@ -127,6 +134,14 @@ export function describeCompetition(count: CompetitionCount): string {
       'Jenis usaha Anda tidak dapat dicocokkan dengan kategori resmi Google Maps, sehingga ' +
       'jumlah pesaing TIDAK kami ukur. Angka persaingan di laporan ini tidak dapat dipakai — ' +
       'hitung sendiri di lapangan.'
+    );
+  }
+
+  if (count.found === 0 && count.capped) {
+    return (
+      'Pencarian pesaing tidak dapat diselesaikan saat laporan ini dibuat, sehingga jumlah ' +
+      'pesaing TIDAK diketahui. Jangan membaca ini sebagai pasar yang kosong — angka ' +
+      'persaingan di laporan ini tidak dapat dipakai.'
     );
   }
 

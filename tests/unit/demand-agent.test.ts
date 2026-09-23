@@ -61,9 +61,12 @@ describe('Demand Agent', () => {
 
     // The mock demographic provider returned identical figures for every
     // location on earth, and those figures were printed in customer reports.
+    // The trade profile travels with the call so the service can mark which
+    // facilities actually drive demand for this business.
     expect(locationContextService.describe).toHaveBeenCalledWith(
       { latitude: -6.261, longitude: 106.816 },
-      'mock-project-id'
+      'mock-project-id',
+      expect.objectContaining({ demandDrivers: expect.any(Array) })
     );
   });
 
