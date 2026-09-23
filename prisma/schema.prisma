@@ -73,7 +73,12 @@ model Project {
   /// AREA_SCOUTING   — client has only an area; we recommend micro-areas.
   /// The three need different pipelines, so this drives the orchestrator.
   projectType String   @default("AREA_SCOUTING") @map("project_type")
-  status      String   @default("DRAFT") // DRAFT, INTAKE, RESEARCH, ANALYSIS, REVIEW, DELIVERED
+  status      String   @default("DRAFT") // DRAFT, INTAKE, RESEARCH, ANALYSIS, REVIEW, DELIVERED, FAILED
+  /// Why a FAILED project stopped, in words the owner can act on.
+  ///
+  /// Without this a permanently failed job left the project sitting at its last
+  /// status, indistinguishable from one still running.
+  failureReason String? @map("failure_reason")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 

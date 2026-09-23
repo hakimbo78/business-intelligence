@@ -1,6 +1,7 @@
 import type { JobQueue } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import { logger } from '../lib/logger.js';
+import { classifyFailure } from './job-failure.js';
 import { researchPlannerAgent } from '../agents/research-planner.agent.js';
 import { candidateDiscoveryAgent } from '../agents/candidate-discovery.agent.js';
 import { competitionAgent } from '../agents/competition.agent.js';
@@ -108,10 +109,23 @@ export class QueueWorker {
 
     } catch (error) {
       const attempts = job.attempts + 1;
-      const willRetry = attempts < job.maxAttempts;
+      const failure = classifyFailure(error);
+
+      // A permanent fault is not made better by repetition. The run that
+      // exposed this retried an out-of-credit error three times, and the
+      // provider's own message said the retries were holding credit in flight
+      // and making the next attempt fail sooner.
+      const willRetry = failure.kind === 'RETRYABLE' && attempts < job.maxAttempts;
 
       logger.error(
-        { err: error, jobId: job.id, attempts, maxAttempts: job.maxAttempts, willRetry },
+        {
+          err: error,
+          jobId: job.id,
+          attempts,
+          maxAttempts: job.maxAttempts,
+          willRetry,
+          failureCode: failure.code,
+        },
         willRetry ? 'Job failed; will retry' : 'Job failed permanently'
       );
 
@@ -124,6 +138,20 @@ export class QueueWorker {
           updatedAt: new Date(),
         },
       });
+
+      // Carry the failure to the project, so the order stops looking like one
+      // that is still running.
+      if (!willRetry && job.type === 'GENERATE_REPORT') {
+        const { projectId } = job.payload as { projectId: string };
+        try {
+          await prisma.project.update({
+            where: { id: projectId },
+            data: { status: 'FAILED', failureReason: failure.message },
+          });
+        } catch (updateError) {
+          logger.error({ err: updateError, projectId }, 'Could not mark the project as failed');
+        }
+      }
     }
   }
 
