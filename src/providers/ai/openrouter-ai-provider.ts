@@ -65,7 +65,12 @@ CRITICAL INSTRUCTIONS:
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }
           ],
-          response_format: { type: "json_object" }
+          response_format: { type: "json_object" },
+          // Omitted entirely at 'none', because a model that cannot reason
+          // rejects the field rather than ignoring it.
+          ...(env.OPENROUTER_REASONING_EFFORT === 'none'
+            ? {}
+            : { reasoning: { effort: env.OPENROUTER_REASONING_EFFORT } }),
         }),
         // Without this a stalled call hangs the whole pipeline, and the order
         // sits at PROCESSING with nothing to show anyone. A reasoning model on

@@ -74,6 +74,20 @@ const envSchema = z.object({
   OPENROUTER_MAX_TOKENS: z.coerce.number().int().positive().default(4_000),
   // A stalled LLM call would otherwise hold a report open indefinitely.
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
+  /**
+   * How hard a reasoning model may think before answering.
+   *
+   * Measured on glm-5.3-flash, three runs each: 'low' averaged 5.6 s and spent
+   * no reasoning tokens at all, while the default averaged 25.2 s and 1,141 of
+   * them — 4.5 times slower and 6 times dearer for the same answer. The
+   * pipeline makes eight of these calls per report.
+   *
+   * 'low' is the default because the model here only writes prose: every
+   * number the report depends on is computed deterministically and overwrites
+   * whatever the model says. 'none' omits the field entirely, for models that
+   * do not support it.
+   */
+  OPENROUTER_REASONING_EFFORT: z.enum(['none', 'low', 'medium', 'high']).default('low'),
 
   // CORS (required in production so the allow-list is never implicit)
   CORS_ALLOWED_ORIGINS: z.string().optional(),

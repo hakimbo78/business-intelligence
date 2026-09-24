@@ -132,12 +132,18 @@ export class PopulationService {
     projectId?: string
   ): Promise<PopulationContext> {
     const radii = [...new Set([500, 1000, catchmentRadiusMeters])].sort((a, b) => a - b);
-    const rings: CatchmentPopulation[] = [];
 
-    for (const radius of radii) {
-      const population = await this.populationWithin(centre, radius, projectId);
-      if (population !== null) rings.push({ radiusMeters: radius, population });
-    }
+    // The service queues each request and is polled until it finishes, so three
+    // rings in sequence cost three waits for no reason.
+    const measured = await Promise.all(
+      radii.map(async (radius) => ({
+        radiusMeters: radius,
+        population: await this.populationWithin(centre, radius, projectId),
+      }))
+    );
+
+    const rings: CatchmentPopulation[] = measured
+      .filter((r): r is CatchmentPopulation => r.population !== null);
 
     const catchment = rings.find((r) => r.radiusMeters === catchmentRadiusMeters)?.population ?? null;
 

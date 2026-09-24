@@ -365,20 +365,19 @@ ${JSON.stringify(project.candidates.map(c => ({ name: c.name, rent: c.estimatedR
 
     // Free sources, so both are attempted for every report; each degrades to
     // null rather than failing the report.
-    const osmRoad = premisesPoint
-      ? await osmRoadService.describe(premisesPoint, {
-          preferredName: assessed?.geocodedRoadName,
-          projectId,
-        })
-      : null;
-
-    const population = premisesPoint
-      ? await populationService.describe(premisesPoint, profile.catchmentRadiusMeters, projectId)
-      : null;
-
-    const reachability = premisesPoint
-      ? await reachabilityService.measure(premisesPoint, profile.catchmentRadiusMeters, projectId)
-      : null;
+    // Three independent reads of two free services. Run one after another they
+    // added about three minutes to a report, because each falls back through a
+    // second endpoint on timeout and WorldPop polls a queued task.
+    const [osmRoad, population, reachability] = premisesPoint
+      ? await Promise.all([
+          osmRoadService.describe(premisesPoint, {
+            preferredName: assessed?.geocodedRoadName,
+            projectId,
+          }),
+          populationService.describe(premisesPoint, profile.catchmentRadiusMeters, projectId),
+          reachabilityService.measure(premisesPoint, profile.catchmentRadiusMeters, projectId),
+        ])
+      : [null, null, null];
 
     const sensitivity = (project.financialAnalysis as any)?.sensitivity;
     const competitionCount = (project.competitionAnalysis as any)?.count;
